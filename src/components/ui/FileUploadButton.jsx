@@ -20,8 +20,13 @@ const FileUploadButton = ({
 
   const handleFileChange = (event) => {
     const file = event.target.files?.[0];
+    console.log('FileUploadButton handleFileChange:', file);
     if (file && onChange) {
       onChange(file, event);
+      // Reset input after callback to allow selecting the same file again
+      setTimeout(() => {
+        event.target.value = '';
+      }, 100);
     }
   };
 

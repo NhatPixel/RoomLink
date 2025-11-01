@@ -109,21 +109,7 @@ function App() {
 
 // Room Registration Page Wrapper
 const RoomRegistrationPageWrapper = () => {
-  const handleSuccess = (roomData) => {
-    console.log('Room registration successful:', roomData);
-    window.location.href = '/student';
-  };
-
-  const handleCancel = () => {
-    window.location.href = '/student';
-  };
-
-  return (
-    <RoomRegistrationPage 
-      onSuccess={handleSuccess}
-      onCancel={handleCancel}
-    />
-  );
+  return <RoomRegistrationPage />;
 };
 
 // Edit Profile Page Wrapper

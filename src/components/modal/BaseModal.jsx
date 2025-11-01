@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
-import Button from './Button';
+import Button from '../ui/Button';
 
-const Modal = ({
+const BaseModal = ({
   isOpen = false,
   onClose,
   title,
@@ -107,4 +107,5 @@ export const ModalBody = ({ children, className = '' }) => {
   );
 };
 
-export default Modal;
+export default BaseModal;
+

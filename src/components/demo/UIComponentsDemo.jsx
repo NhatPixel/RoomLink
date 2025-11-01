@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNotification } from '../../contexts/NotificationContext';
 import PageLayout from '../ui/PageLayout';
 import Button from '../ui/Button';
-import Modal, { ModalBody, ModalFooter } from '../ui/Modal';
+import BaseModal, { ModalBody, ModalFooter } from '../modal/BaseModal';
 import Loading from '../ui/Loading';
 
 const UIComponentsDemo = ({ onSuccess, onCancel }) => {
@@ -144,7 +144,7 @@ const UIComponentsDemo = ({ onSuccess, onCancel }) => {
       </div>
 
       {/* Modal */}
-      <Modal
+      <BaseModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         title="Demo Modal"
@@ -169,7 +169,7 @@ const UIComponentsDemo = ({ onSuccess, onCancel }) => {
             Xác nhận
           </Button>
         </ModalFooter>
-      </Modal>
+      </BaseModal>
     </PageLayout>
   );
 };

@@ -88,13 +88,13 @@ import PageHeader from '../components/ui/PageHeader';
 </PageHeader>
 ```
 
-### 5. **Modal Component**
+### 5. **BaseModal Component**
 ```jsx
-import Modal, { ModalBody, ModalFooter } from '../components/ui/Modal';
+import BaseModal, { ModalBody, ModalFooter } from '../components/modal/BaseModal';
 
 const [isOpen, setIsOpen] = useState(false);
 
-<Modal
+<BaseModal
   isOpen={isOpen}
   onClose={() => setIsOpen(false)}
   title="Tiêu đề Modal"
@@ -113,7 +113,7 @@ const [isOpen, setIsOpen] = useState(false);
       Xác nhận
     </Button>
   </ModalFooter>
-</Modal>
+</BaseModal>
 ```
 
 ### 6. **PageLayout Component**
@@ -183,7 +183,7 @@ showSuccess('Thành công!');
 - [ ] Thay thế loading spinner bằng `<Loading />` component
 - [ ] Thay thế button cũ bằng `<Button />` component
 - [ ] Thay thế header cũ bằng `<PageHeader />` component
-- [ ] Thay thế modal cũ bằng `<Modal />` component
+- [ ] Thay thế modal cũ bằng `<BaseModal />` component
 - [ ] Sử dụng `<PageLayout />` cho layout chuẩn
 - [ ] Test tất cả các chức năng sau khi migrate
 

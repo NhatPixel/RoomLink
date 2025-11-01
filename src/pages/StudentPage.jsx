@@ -59,10 +59,6 @@ const StudentPage = () => {
               Quản lý phòng ở
             </h2>
             <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-4">
-              <div className="bg-indigo-50 p-6 rounded-lg cursor-pointer hover:bg-indigo-100 transition-colors" onClick={handleRoomRegistration}>
-                <h3 className="text-lg font-semibold text-indigo-800 mb-2">Đăng ký phòng</h3>
-                <p className="text-indigo-600 text-sm">Đăng ký phòng ở KTX</p>
-              </div>
               <div className="bg-orange-50 p-6 rounded-lg cursor-pointer hover:bg-orange-100 transition-colors" onClick={handleRoomExtension}>
                 <h3 className="text-lg font-semibold text-orange-800 mb-2">Gia hạn thời gian ở</h3>
                 <p className="text-orange-600 text-sm">Gia hạn thời gian ở KTX</p>

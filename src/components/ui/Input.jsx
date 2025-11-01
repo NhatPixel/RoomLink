@@ -1,0 +1,119 @@
+import React from 'react';
+
+const Input = ({
+  label,
+  name,
+  type = 'text',
+  value,
+  onChange,
+  placeholder,
+  error,
+  required = false,
+  disabled = false,
+  size = 'medium',
+  className = '',
+  helperText,
+  icon,
+  iconPosition = 'left',
+  ...props
+}) => {
+  const sizeClasses = {
+    small: 'px-2 py-1 text-sm',
+    medium: 'px-3 py-2 text-sm',
+    large: 'px-4 py-3 text-base'
+  };
+
+  const baseInputClasses = `
+    appearance-none block w-full border rounded-md placeholder-gray-400
+    focus:outline-none focus:ring-2 focus:ring-offset-0
+    transition-colors sm:text-sm
+    ${sizeClasses[size]}
+    ${error 
+      ? 'border-red-300 focus:border-red-500 focus:ring-red-500' 
+      : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
+    }
+    ${disabled ? 'bg-gray-100 cursor-not-allowed opacity-60' : 'bg-white'}
+    ${className}
+  `.trim().replace(/\s+/g, ' ');
+
+  const inputId = props.id || name;
+
+  const inputElement = (
+    <input
+      id={inputId}
+      name={name}
+      type={type}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      required={required}
+      disabled={disabled}
+      className={baseInputClasses}
+      {...props}
+    />
+  );
+
+  const renderInput = () => {
+    if (icon) {
+      const iconClasses = iconPosition === 'left' ? 'left-0 pl-3' : 'right-0 pr-3';
+      const inputPadding = iconPosition === 'left' ? 'pl-10' : 'pr-10';
+      
+      return (
+        <div className="relative">
+          <div className={`absolute inset-y-0 ${iconPosition === 'left' ? 'left' : 'right'}-0 flex items-center ${iconClasses}`}>
+            <div className="text-gray-400">
+              {icon}
+            </div>
+          </div>
+          <input
+            id={inputId}
+            name={name}
+            type={type}
+            value={value}
+            onChange={onChange}
+            placeholder={placeholder}
+            required={required}
+            disabled={disabled}
+            className={`${baseInputClasses} ${inputPadding}`}
+            {...props}
+          />
+        </div>
+      );
+    }
+    
+    return inputElement;
+  };
+
+  return (
+    <div className="w-full">
+      {label && (
+        <label 
+          htmlFor={inputId} 
+          className="block text-sm font-medium text-gray-700 mb-1"
+        >
+          {label}
+          {required && <span className="text-red-500 ml-1">*</span>}
+        </label>
+      )}
+      
+      <div className="mt-1">
+        {renderInput()}
+      </div>
+
+      {error && (
+        <p className="mt-1 text-sm text-red-600" role="alert">
+          {error}
+        </p>
+      )}
+
+      {helperText && !error && (
+        <p className="mt-1 text-sm text-gray-500">
+          {helperText}
+        </p>
+      )}
+    </div>
+  );
+};
+
+export default Input;
+
