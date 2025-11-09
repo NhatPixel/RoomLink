@@ -17,29 +17,33 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     // Check if user is logged in from localStorage
     const savedUser = localStorage.getItem('user');
+    const savedToken = localStorage.getItem('token');
     const isLoggedIn = localStorage.getItem('isLoggedIn');
     
-    if (savedUser && isLoggedIn === 'true') {
+    if (savedUser && savedToken && isLoggedIn === 'true') {
       try {
         setUser(JSON.parse(savedUser));
       } catch (error) {
         console.error('Error parsing saved user:', error);
         localStorage.removeItem('user');
+        localStorage.removeItem('token');
         localStorage.removeItem('isLoggedIn');
       }
     }
     setIsLoading(false);
   }, []);
 
-  const login = (userData) => {
+  const login = (userData, token) => {
     setUser(userData);
     localStorage.setItem('user', JSON.stringify(userData));
+    localStorage.setItem('token', token);
     localStorage.setItem('isLoggedIn', 'true');
   };
 
   const logout = () => {
     setUser(null);
     localStorage.removeItem('user');
+    localStorage.removeItem('token');
     localStorage.removeItem('isLoggedIn');
   };
 
