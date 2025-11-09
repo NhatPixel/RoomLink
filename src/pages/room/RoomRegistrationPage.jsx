@@ -9,7 +9,7 @@ import { useNotification } from '../../contexts/NotificationContext';
 import ImageEditorModal from '../../components/modal/ImageEditorModal';
 import RoomDetail from "../../components/room/RoomDetail"
 import jsQR from 'jsqr';
-import authApi from "../../api/authApi"
+import { authAPI } from "../../api"
 const RoomRegistrationPage = () => {
   const [currentStep, setCurrentStep] = useState('room-selection'); // room-selection, personal-info
   const [selectedRoom, setSelectedRoom] = useState(null);
@@ -274,8 +274,8 @@ const PersonalInfoForm = ({ selectedRoom, selectedRoomSlot, onBack, onCancel }) 
       const formDataAvatar = new FormData();
       formDataAvatar.append("Avatar", files.avatar);
       try {
-        const cccdResponse = await authApi.checkCCCD(formDataCCCD);
-        const avatarResponse = await authApi.checkAvatar(formDataAvatar);
+        const cccdResponse = await authAPI.checkCCCD(formDataCCCD);
+        const avatarResponse = await authAPI.checkAvatar(formDataAvatar);
         // Prepare registration data
         const genderMap = { Nam: "male", Nữ: "female" };
 
@@ -288,7 +288,7 @@ const PersonalInfoForm = ({ selectedRoom, selectedRoomSlot, onBack, onCancel }) 
           avatar: avatarResponse.data.avatarPath
         };
         console.log("registration data", registrationData)
-        const response = await authApi.register(registrationData);
+        const response = await authAPI.register(registrationData);
         if (response.success === true) {
           setTimeout(() => {
             setIsLoading(false);

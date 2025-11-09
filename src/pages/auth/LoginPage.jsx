@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotification } from '../../contexts/NotificationContext';
 import { authAPI, userAPI } from '../../api';
+import { setTokenGetter } from '../../api/axiosClient';
 import FaceRecognition from '../../components/auth/FaceRecognition';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
@@ -26,47 +27,90 @@ const LoginPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Validate input
+    if (!formData.username || !formData.password) {
+      showError('Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu!');
+      return;
+    }
+
+    if (formData.username.length !== 12) {
+      showError('CCCD phải đủ 12 số!');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       // Step 1: Call API login
-      const loginResponse = await authAPI.login(formData.username, formData.password);
+      const loginResponse = await authAPI.login({
+        identification: formData.username,
+        password: formData.password
+      });
       
-      // Extract access_token from response
-      const { data } = loginResponse;
-      const access_token = data.access_token;
+      // Extract access_token from response (axiosClient already returns response.data)
+      const access_token = loginResponse.data.access_token;
+      const userId = loginResponse.data.userId;
       
-      // Step 2: Store token first (needed for getUser API)
+      if (!access_token) {
+        throw new Error('Không nhận được token từ server');
+      }
+      
+      // Step 2: Store token and setup token getter (needed for getUser API)
       localStorage.setItem('token', access_token);
+      setTokenGetter(() => localStorage.getItem('token'));
       
       // Step 3: Call getUser API to get full user info (including role)
-      const userResponse = await userAPI.getUser();
-      const userData = userResponse.data;
-      
-      // Step 4: User data already includes role from BE
-      const user = {
-        ...userData,
-        id: data.userId || userData.id
-      };
-      
-      // Step 5: Store user data and token using AuthContext
-      authLogin(user, access_token);
-      
-      // Show success notification
-      showSuccess('Đăng nhập thành công!');
-      
-      // Redirect based on role after a short delay
-      setTimeout(() => {
-        if (user.role === 'admin') {
-          window.location.href = '/admin';
-        } else {
-          window.location.href = '/student';
-        }
-      }, 1000);
+      try {
+        const userResponse = await userAPI.getUser();
+        const userData = userResponse.data;
+        
+        // Step 4: User data already includes role from BE
+        const user = {
+          ...userData,
+          id: userId || userData.id
+        };
+        
+        // Step 5: Store user data and token using AuthContext
+        authLogin(user, access_token);
+        
+        // Show success notification
+        showSuccess('Đăng nhập thành công!');
+        
+        // Redirect based on role after a short delay
+        setTimeout(() => {
+          if (user.role === 'admin') {
+            window.location.href = '/admin';
+          } else {
+            window.location.href = '/student';
+          }
+        }, 1000);
+      } catch (getUserError) {
+        // If getUser fails, still clear token and show error
+        const getUserErrorMessage = getUserError.response?.data?.message || getUserError.message || 'Không thể lấy thông tin người dùng!';
+        showError(getUserErrorMessage);
+        localStorage.removeItem('token');
+        setTokenGetter(() => null);
+      }
     } catch (err) {
-      showError(err.message || 'Tên đăng nhập hoặc mật khẩu không đúng!');
+      // Handle different types of errors
+      let errorMessage = 'Tên đăng nhập hoặc mật khẩu không đúng!';
+      
+      if (err.response) {
+        // Server responded with error status
+        errorMessage = err.response.data?.message || errorMessage;
+      } else if (err.request) {
+        // Request was made but no response received (network error)
+        errorMessage = 'Không thể kết nối đến server. Vui lòng kiểm tra kết nối mạng!';
+      } else {
+        // Something else happened
+        errorMessage = err.message || errorMessage;
+      }
+      
+      showError(errorMessage);
       // Clear token if login failed
       localStorage.removeItem('token');
+      setTokenGetter(() => null);
     } finally {
       setIsLoading(false);
     }

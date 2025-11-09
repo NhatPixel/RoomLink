@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from "react";
 import Pagination from "../ui/Pagination";
 import Button from "../ui/Button";
-import roomApi from "../../api/roomApi";
-import buildingApi from "../../api/buildingApi";
+import { roomAPI, buildingAPI } from "../../api";
 import RoomList from "./RoomList";
 
 const RoomSelection = ({ onRoomSelected, onCancel }) => {
@@ -50,7 +49,7 @@ const RoomSelection = ({ onRoomSelected, onCancel }) => {
 
   const fetchRoomTypes = async () => {
     try {
-      const res = await roomApi.getRoomType();
+      const res = await roomAPI.getRoomType();
       if (res.success) setRoomTypes(res.data);
     } catch (error) {
       console.error("Lỗi khi lấy loại phòng:", error);
@@ -60,7 +59,7 @@ const RoomSelection = ({ onRoomSelected, onCancel }) => {
   const fetchBuildings = async (genderRestriction, roomTypeId) => {
     try {
       setIsLoading(true);
-      const res = await buildingApi.getBuilding({ genderRestriction, roomTypeId });
+      const res = await buildingAPI.getBuilding({ genderRestriction, roomTypeId });
       if (res.success) setBuildings(res.data);
     } catch (error) {
       console.error("Lỗi khi lấy tòa:", error);
@@ -72,7 +71,7 @@ const RoomSelection = ({ onRoomSelected, onCancel }) => {
   const fetchRooms = async (roomTypeId, buildingId) => {
     try {
       setIsLoading(true);
-      const res = await roomApi.getRoom({ roomTypeId, buildingId });
+      const res = await roomAPI.getRoom({ roomTypeId, buildingId });
       console.log("response", res)
       if (res.success) {
 

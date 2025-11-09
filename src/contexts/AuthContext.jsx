@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { setTokenGetter } from '../api/axiosClient';
 
 const AuthContext = createContext();
 
@@ -20,6 +21,9 @@ export const AuthProvider = ({ children }) => {
     const savedToken = localStorage.getItem('token');
     const isLoggedIn = localStorage.getItem('isLoggedIn');
     
+    // Setup token getter for axiosClient
+    setTokenGetter(() => localStorage.getItem('token'));
+    
     if (savedUser && savedToken && isLoggedIn === 'true') {
       try {
         setUser(JSON.parse(savedUser));
@@ -28,6 +32,7 @@ export const AuthProvider = ({ children }) => {
         localStorage.removeItem('user');
         localStorage.removeItem('token');
         localStorage.removeItem('isLoggedIn');
+        setTokenGetter(() => null);
       }
     }
     setIsLoading(false);
@@ -45,6 +50,7 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('user');
     localStorage.removeItem('token');
     localStorage.removeItem('isLoggedIn');
+    setTokenGetter(() => null);
   };
 
   const isAuthenticated = () => {
