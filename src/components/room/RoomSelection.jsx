@@ -4,6 +4,7 @@ import Button from "../ui/Button";
 import roomApi from "../../api/roomApi";
 import buildingApi from "../../api/buildingApi";
 import RoomList from "./RoomList";
+import { useNotification } from '../../components/ui/Notification';
 
 const RoomSelection = ({ onRoomSelected, onCancel }) => {
   const [filters, setFilters] = useState({
@@ -20,6 +21,7 @@ const RoomSelection = ({ onRoomSelected, onCancel }) => {
   const [paginatedRooms, setPaginatedRooms] = useState([]);
   const [selectedFloor, setSelectedFloor] = useState(null);
   const [floors, setFloors] = useState([]);
+  const { showError } = useNotification();
 
   useEffect(() => {
     if (!selectedFloor) {
@@ -52,17 +54,17 @@ const RoomSelection = ({ onRoomSelected, onCancel }) => {
       const res = await roomApi.getRoomType();
       if (res.success) setRoomTypes(res.data);
     } catch (error) {
-      console.error("Lỗi khi lấy loại phòng:", error);
+      showError(error.message || "Đã xảy ra lỗi!");
     }
   };
 
   const fetchBuildings = async (genderRestriction, roomTypeId) => {
     try {
       setIsLoading(true);
-      const res = await buildingApi.getBuilding({ genderRestriction, roomTypeId });
+      const res = await buildingApi.getBuildings({ genderRestriction, roomTypeId });
       if (res.success) setBuildings(res.data);
     } catch (error) {
-      console.error("Lỗi khi lấy tòa:", error);
+      showError(error.message || "Đã xảy ra lỗi!");
     } finally {
       setIsLoading(false);
     }
@@ -72,9 +74,7 @@ const RoomSelection = ({ onRoomSelected, onCancel }) => {
     try {
       setIsLoading(true);
       const res = await roomApi.getRoom({ roomTypeId, buildingId });
-      console.log("response", res)
       if (res.success) {
-
         setRooms(res.data);
         const uniqueFloors = [...new Set(res.data.map(r => r.floor_number))].sort((a, b) => a - b);
         setFloors(uniqueFloors);
@@ -87,7 +87,7 @@ const RoomSelection = ({ onRoomSelected, onCancel }) => {
         setCurrentPage(1);
       }
     } catch (error) {
-      console.error("Lỗi khi lấy phòng:", error);
+      showError(error.message || "Đã xảy ra lỗi!");
     } finally {
       setIsLoading(false);
     }

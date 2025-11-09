@@ -35,7 +35,7 @@ function App() {
   // Simple routing based on URL
   const getCurrentPage = () => {
     const path = window.location.pathname;
-    
+
     switch (path) {
       case '/login':
         return <LoginPage />;
@@ -101,7 +101,7 @@ function App() {
       <AuthProvider>
         <div className="App">
           {getCurrentPage()}
-      </div>
+        </div>
       </AuthProvider>
     </NotificationProvider>
   );
@@ -124,7 +124,7 @@ const EditProfilePageWrapper = () => {
   };
 
   return (
-    <EditProfilePage 
+    <EditProfilePage
       onSuccess={handleSuccess}
       onCancel={handleCancel}
     />
@@ -143,7 +143,7 @@ const FaceRegistrationPageWrapper = () => {
   };
 
   return (
-    <FaceRegistrationPage 
+    <FaceRegistrationPage
       onSuccess={handleSuccess}
       onCancel={handleCancel}
     />
@@ -163,7 +163,7 @@ const ChangePasswordPageWrapper = () => {
   };
 
   return (
-    <ChangePasswordPage 
+    <ChangePasswordPage
       onSuccess={handleSuccess}
       onCancel={handleCancel}
     />
@@ -183,7 +183,7 @@ const ForgotPasswordPageWrapper = () => {
   };
 
   return (
-    <ForgotPasswordPage 
+    <ForgotPasswordPage
       onSuccess={handleSuccess}
       onCancel={handleCancel}
     />
@@ -202,7 +202,7 @@ const RoomExtensionPageWrapper = () => {
   };
 
   return (
-    <RoomExtensionPage 
+    <RoomExtensionPage
       onSuccess={handleSuccess}
       onCancel={handleCancel}
     />
@@ -221,7 +221,7 @@ const RoomTransferPageWrapper = () => {
   };
 
   return (
-    <RoomTransferPage 
+    <RoomTransferPage
       onSuccess={handleSuccess}
       onCancel={handleCancel}
     />
@@ -240,7 +240,7 @@ const RoomCancellationPageWrapper = () => {
   };
 
   return (
-    <RoomCancellationPage 
+    <RoomCancellationPage
       onSuccess={handleSuccess}
       onCancel={handleCancel}
     />
@@ -254,7 +254,7 @@ const BillsViewPageWrapper = () => {
   };
 
   return (
-    <BillsViewPage 
+    <BillsViewPage
       onCancel={handleCancel}
     />
   );
@@ -267,7 +267,7 @@ const FeesViewPageWrapper = () => {
   };
 
   return (
-    <FeesViewPage 
+    <FeesViewPage
       onCancel={handleCancel}
     />
   );
@@ -276,7 +276,7 @@ const FeesViewPageWrapper = () => {
 // Payment Page Wrapper
 const PaymentPageWrapper = () => {
   const { showSuccess } = useNotification();
-  
+
   const handleSuccess = (paymentData) => {
     console.log('Payment successful:', paymentData);
     showSuccess('Thanh toán thành công!');
@@ -290,7 +290,7 @@ const PaymentPageWrapper = () => {
   };
 
   return (
-    <PaymentPage 
+    <PaymentPage
       onSuccess={handleSuccess}
       onCancel={handleCancel}
     />
@@ -300,7 +300,7 @@ const PaymentPageWrapper = () => {
 // Health Checkup Registration Page Wrapper
 const HealthCheckupRegistrationPageWrapper = () => {
   const { showSuccess } = useNotification();
-  
+
   const handleSuccess = (registrationData) => {
     console.log('Health checkup registration successful:', registrationData);
     showSuccess('Đăng ký khám sức khỏe thành công!');
@@ -314,7 +314,7 @@ const HealthCheckupRegistrationPageWrapper = () => {
   };
 
   return (
-    <HealthCheckupRegistrationPage 
+    <HealthCheckupRegistrationPage
       onSuccess={handleSuccess}
       onCancel={handleCancel}
     />
@@ -324,7 +324,7 @@ const HealthCheckupRegistrationPageWrapper = () => {
 // Vehicle Registration Page Wrapper
 const VehicleRegistrationPageWrapper = () => {
   const { showSuccess } = useNotification();
-  
+
   const handleSuccess = (vehicleData) => {
     console.log('Vehicle registration successful:', vehicleData);
     showSuccess('Đăng ký biển số xe thành công!');
@@ -338,7 +338,7 @@ const VehicleRegistrationPageWrapper = () => {
   };
 
   return (
-    <VehicleRegistrationPage 
+    <VehicleRegistrationPage
       onSuccess={handleSuccess}
       onCancel={handleCancel}
     />
@@ -348,7 +348,7 @@ const VehicleRegistrationPageWrapper = () => {
 // Extension Approval Page Wrapper
 const ExtensionApprovalPageWrapper = () => {
   const { showSuccess } = useNotification();
-  
+
   const handleSuccess = (approvalData) => {
     console.log('Extension approval successful:', approvalData);
     showSuccess('Duyệt đơn gia hạn thành công!');
@@ -362,7 +362,7 @@ const ExtensionApprovalPageWrapper = () => {
   };
 
   return (
-    <ExtensionApprovalPage 
+    <ExtensionApprovalPage
       onSuccess={handleSuccess}
       onCancel={handleCancel}
     />
@@ -372,7 +372,7 @@ const ExtensionApprovalPageWrapper = () => {
 // Room Registration Approval Page Wrapper
 const RoomRegistrationApprovalPageWrapper = () => {
   const { showSuccess } = useNotification();
-  
+
   const handleSuccess = (approvalData) => {
     console.log('Room registration approval successful:', approvalData);
     showSuccess('Duyệt đơn đăng ký KTX thành công!');
@@ -386,7 +386,7 @@ const RoomRegistrationApprovalPageWrapper = () => {
   };
 
   return (
-    <RoomRegistrationApprovalPage 
+    <RoomRegistrationApprovalPage
       onSuccess={handleSuccess}
       onCancel={handleCancel}
     />
@@ -396,7 +396,7 @@ const RoomRegistrationApprovalPageWrapper = () => {
 // Room Cancellation Approval Page Wrapper
 const RoomCancellationApprovalPageWrapper = () => {
   const { showSuccess } = useNotification();
-  
+
   const handleSuccess = (approvalData) => {
     console.log('Room cancellation approval successful:', approvalData);
     showSuccess('Duyệt đơn hủy phòng KTX thành công!');
@@ -410,7 +410,7 @@ const RoomCancellationApprovalPageWrapper = () => {
   };
 
   return (
-    <RoomCancellationApprovalPage 
+    <RoomCancellationApprovalPage
       onSuccess={handleSuccess}
       onCancel={handleCancel}
     />
@@ -420,7 +420,7 @@ const RoomCancellationApprovalPageWrapper = () => {
 // Vehicle Registration Approval Page Wrapper
 const VehicleRegistrationApprovalPageWrapper = () => {
   const { showSuccess } = useNotification();
-  
+
   const handleSuccess = (approvalData) => {
     console.log('Vehicle registration approval successful:', approvalData);
     showSuccess('Duyệt đơn đăng ký xe thành công!');
@@ -434,7 +434,7 @@ const VehicleRegistrationApprovalPageWrapper = () => {
   };
 
   return (
-    <VehicleRegistrationApprovalPage 
+    <VehicleRegistrationApprovalPage
       onSuccess={handleSuccess}
       onCancel={handleCancel}
     />
@@ -444,7 +444,7 @@ const VehicleRegistrationApprovalPageWrapper = () => {
 // Room Type Management Page Wrapper
 const RoomTypeManagementPageWrapper = () => {
   const { showSuccess } = useNotification();
-  
+
   const handleSuccess = (managementData) => {
     console.log('Room type management successful:', managementData);
     showSuccess('Quản lý loại phòng thành công!');
@@ -458,7 +458,7 @@ const RoomTypeManagementPageWrapper = () => {
   };
 
   return (
-    <RoomTypeManagementPage 
+    <RoomTypeManagementPage
       onSuccess={handleSuccess}
       onCancel={handleCancel}
     />
@@ -468,7 +468,7 @@ const RoomTypeManagementPageWrapper = () => {
 // Create Admin Account Page Wrapper
 const CreateAdminAccountPageWrapper = () => {
   const { showSuccess } = useNotification();
-  
+
   const handleSuccess = (adminData) => {
     console.log('Admin account created successfully:', adminData);
     showSuccess('Tạo tài khoản Admin thành công!');
@@ -482,7 +482,7 @@ const CreateAdminAccountPageWrapper = () => {
   };
 
   return (
-    <CreateAdminAccountPage 
+    <CreateAdminAccountPage
       onSuccess={handleSuccess}
       onCancel={handleCancel}
     />
@@ -492,7 +492,7 @@ const CreateAdminAccountPageWrapper = () => {
 // Room Transfer Approval Page Wrapper
 const RoomTransferApprovalPageWrapper = () => {
   const { showSuccess } = useNotification();
-  
+
   const handleSuccess = (approvalData) => {
     console.log('Room transfer approval successful:', approvalData);
     showSuccess('Duyệt đơn chuyển phòng KTX thành công!');
@@ -506,7 +506,7 @@ const RoomTransferApprovalPageWrapper = () => {
   };
 
   return (
-    <RoomTransferApprovalPage 
+    <RoomTransferApprovalPage
       onSuccess={handleSuccess}
       onCancel={handleCancel}
     />
@@ -516,7 +516,7 @@ const RoomTransferApprovalPageWrapper = () => {
 // Electricity Water Bill Creation Page Wrapper
 const ElectricityWaterBillCreationPageWrapper = () => {
   const { showSuccess } = useNotification();
-  
+
   const handleSuccess = (billData) => {
     console.log('Electricity water bill creation successful:', billData);
     showSuccess('Tạo hóa đơn điện nước thành công!');
@@ -530,7 +530,7 @@ const ElectricityWaterBillCreationPageWrapper = () => {
   };
 
   return (
-    <ElectricityWaterBillCreationPage 
+    <ElectricityWaterBillCreationPage
       onSuccess={handleSuccess}
       onCancel={handleCancel}
     />
@@ -540,7 +540,7 @@ const ElectricityWaterBillCreationPageWrapper = () => {
 // Health Checkup Creation Page Wrapper
 const HealthCheckupCreationPageWrapper = () => {
   const { showSuccess } = useNotification();
-  
+
   const handleSuccess = (sessionData) => {
     console.log('Health checkup creation successful:', sessionData);
     showSuccess('Tạo đợt khám sức khỏe thành công!');
@@ -554,7 +554,7 @@ const HealthCheckupCreationPageWrapper = () => {
   };
 
   return (
-    <HealthCheckupCreationPage 
+    <HealthCheckupCreationPage
       onSuccess={handleSuccess}
       onCancel={handleCancel}
     />
@@ -564,7 +564,7 @@ const HealthCheckupCreationPageWrapper = () => {
 // Room Management Page Wrapper
 const RoomManagementPageWrapper = () => {
   const { showSuccess } = useNotification();
-  
+
   const handleSuccess = (roomData) => {
     console.log('Room management successful:', roomData);
     showSuccess('Quản lý phòng thành công!');
@@ -578,7 +578,7 @@ const RoomManagementPageWrapper = () => {
   };
 
   return (
-    <RoomManagementPage 
+    <RoomManagementPage
       onSuccess={handleSuccess}
       onCancel={handleCancel}
     />
@@ -588,7 +588,7 @@ const RoomManagementPageWrapper = () => {
 // UI Components Demo Wrapper
 const UIComponentsDemoWrapper = () => {
   const { showSuccess } = useNotification();
-  
+
   const handleSuccess = () => {
     showSuccess('Demo hoàn thành!');
     setTimeout(() => {
@@ -601,7 +601,7 @@ const UIComponentsDemoWrapper = () => {
   };
 
   return (
-    <UIComponentsDemo 
+    <UIComponentsDemo
       onSuccess={handleSuccess}
       onCancel={handleCancel}
     />

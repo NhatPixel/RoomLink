@@ -89,6 +89,7 @@ const PersonalInfoForm = ({ selectedRoom, selectedRoomSlot, onBack, onCancel }) 
     region: '',
     email: '',
     phone: '',
+    mssv: '',
     school: "Trường đại học Sư Phạm Kỹ Thuật TP. HCM"
   });
 
@@ -263,47 +264,66 @@ const PersonalInfoForm = ({ selectedRoom, selectedRoomSlot, onBack, onCancel }) 
     return Object.keys(newErrors).length === 0;
   };
 
+  const [uploadedPaths, setUploadedPaths] = useState({
+    cccdPath: null,
+    avatarPath: null
+  });
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (!validateForm()) return;
 
-    if (validateForm()) {
-      setIsLoading(true);
-      const formDataCCCD = new FormData();
-      formDataCCCD.append("CCCD", files.cccdFront); // Gửi file thật, không chỉ .name
-      const formDataAvatar = new FormData();
-      formDataAvatar.append("Avatar", files.avatar);
-      try {
-        const cccdResponse = await authApi.checkCCCD(formDataCCCD);
-        const avatarResponse = await authApi.checkAvatar(formDataAvatar);
-        // Prepare registration data
-        const genderMap = { Nam: "male", Nữ: "female" };
+    setIsLoading(true);
+    try {
+      const promises = [];
 
-        const registrationData = {
-          ...formData,
-          gender: genderMap[formData.gender] || formData.gender,
-          roomSlotId: selectedRoomSlot.slotId,
-          endDate: selectedRoomSlot.endDate,
-          frontIdentificationImage: cccdResponse.data.cccdPath,
-          avatar: avatarResponse.data.avatarPath
-        };
-        console.log("registration data", registrationData)
-        const response = await authApi.register(registrationData);
-        if (response.success === true) {
-          setTimeout(() => {
-            setIsLoading(false);
-            showSuccess('Đăng ký phòng thành công! Hồ sơ của bạn đang được xét duyệt.');
-            setTimeout(() => {
-              window.location.href = '/login';
-            }, 2000);
-          }, 1500);
-        }
-      } catch (err) {
-        console.log(err.response.data.message)
-        showError(err.response.data.message);
+      if (!uploadedPaths.cccdPath) {
+        const formDataCCCD = new FormData();
+        formDataCCCD.append("CCCD", files.cccdFront);
+        promises.push(authApi.checkCCCD(formDataCCCD).then(res => ({
+          type: "cccd",
+          path: res.data.cccdPath
+        })));
       }
+      if (!uploadedPaths.avatarPath) {
+        const formDataAvatar = new FormData();
+        formDataAvatar.append("Avatar", files.avatar);
+        promises.push(authApi.checkAvatar(formDataAvatar).then(res => ({
+          type: "avatar",
+          path: res.data.avatarPath
+        })));
+      }
+      const results = await Promise.all(promises);
+      const newUploadedPaths = { ...uploadedPaths };
+      results.forEach(r => {
+        if (r.type === "cccd") newUploadedPaths.cccdPath = r.path;
+        if (r.type === "avatar") newUploadedPaths.avatarPath = r.path;
+      });
+      setUploadedPaths(newUploadedPaths);
+      const genderMap = { Nam: "male", Nữ: "female" };
+      const registrationData = {
+        ...formData,
+        gender: genderMap[formData.gender] || formData.gender,
+        roomSlotId: selectedRoomSlot.slotId,
+        duration: selectedRoomSlot.duration,
+        frontIdentificationImage: newUploadedPaths.cccdPath,
+        avatar: newUploadedPaths.avatarPath
+      };
+      const response = await authApi.register(registrationData);
+      if (response.success) {
+        showSuccess("Đăng ký phòng thành công! Hồ sơ của bạn đang được xét duyệt.");
+        setUploadedPaths([]);
+        setTimeout(() => (window.location.href = "/login"), 3000);
+      }
+
+    } catch (err) {
+      showError(err.response?.data?.message || "Đã xảy ra lỗi!");
+    } finally {
+      setIsLoading(false);
     }
   };
+
 
   // Image preprocessing functions
   const enhanceImageForQR = (imageData) => {
@@ -1030,9 +1050,7 @@ const PersonalInfoForm = ({ selectedRoom, selectedRoomSlot, onBack, onCancel }) 
               <div className="flex items-center">
                 <span className="text-blue-700 font-medium">Thời hạn thuê:</span>
                 <span className="ml-1 text-blue-600">
-                  {selectedRoomSlot.endDate
-                    ? new Date(selectedRoomSlot.endDate).toLocaleDateString('vi-VN')
-                    : '—'}
+                  {selectedRoomSlot.duration} Tháng
                 </span>
               </div>
             </div>
@@ -1294,7 +1312,7 @@ const PersonalInfoForm = ({ selectedRoom, selectedRoomSlot, onBack, onCancel }) 
               type="submit"
               variant="primary"
               loading={isLoading}
-            // loadingText="Đang xử lý..."
+              loadingText="Đang xử lý..."
             >
               Hoàn tất đăng ký
             </Button>
