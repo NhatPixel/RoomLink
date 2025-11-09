@@ -89,6 +89,7 @@ const PersonalInfoForm = ({ selectedRoom, selectedRoomSlot, onBack, onCancel }) 
     region: '',
     email: '',
     phone: '',
+    mssv: '',
     school: "Trường đại học Sư Phạm Kỹ Thuật TP. HCM"
   });
 
@@ -263,9 +264,15 @@ const PersonalInfoForm = ({ selectedRoom, selectedRoomSlot, onBack, onCancel }) 
     return Object.keys(newErrors).length === 0;
   };
 
+  const [uploadedPaths, setUploadedPaths] = useState({
+    cccdPath: null,
+    avatarPath: null
+  });
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    if (!validateForm()) return;
 
     if (validateForm()) {
       setIsLoading(true);
@@ -274,8 +281,8 @@ const PersonalInfoForm = ({ selectedRoom, selectedRoomSlot, onBack, onCancel }) 
       const formDataAvatar = new FormData();
       formDataAvatar.append("Avatar", files.avatar);
       try {
-        const cccdResponse = await authAPI.checkCCCD(formDataCCCD);
-        const avatarResponse = await authAPI.checkAvatar(formDataAvatar);
+        const cccdResponse = await authApi.checkCCCD(formDataCCCD);
+        const avatarResponse = await authApi.checkAvatar(formDataAvatar);
         // Prepare registration data
         const genderMap = { Nam: "male", Nữ: "female" };
 
@@ -288,7 +295,7 @@ const PersonalInfoForm = ({ selectedRoom, selectedRoomSlot, onBack, onCancel }) 
           avatar: avatarResponse.data.avatarPath
         };
         console.log("registration data", registrationData)
-        const response = await authAPI.register(registrationData);
+        const response = await authApi.register(registrationData);
         if (response.success === true) {
           setTimeout(() => {
             setIsLoading(false);
@@ -304,6 +311,7 @@ const PersonalInfoForm = ({ selectedRoom, selectedRoomSlot, onBack, onCancel }) 
       }
     }
   };
+
 
   // Image preprocessing functions
   const enhanceImageForQR = (imageData) => {
@@ -1030,9 +1038,7 @@ const PersonalInfoForm = ({ selectedRoom, selectedRoomSlot, onBack, onCancel }) 
               <div className="flex items-center">
                 <span className="text-blue-700 font-medium">Thời hạn thuê:</span>
                 <span className="ml-1 text-blue-600">
-                  {selectedRoomSlot.endDate
-                    ? new Date(selectedRoomSlot.endDate).toLocaleDateString('vi-VN')
-                    : '—'}
+                  {selectedRoomSlot.duration} Tháng
                 </span>
               </div>
             </div>
@@ -1294,7 +1300,7 @@ const PersonalInfoForm = ({ selectedRoom, selectedRoomSlot, onBack, onCancel }) 
               type="submit"
               variant="primary"
               loading={isLoading}
-            // loadingText="Đang xử lý..."
+              loadingText="Đang xử lý..."
             >
               Hoàn tất đăng ký
             </Button>
