@@ -17,6 +17,7 @@ const RoomSelection = ({ onRoomSelected, onCancel }) => {
   const [rooms, setRooms] = useState([]);
   const [roomTypes, setRoomTypes] = useState([]);
   const [buildings, setBuildings] = useState([]);
+
   const [paginatedRooms, setPaginatedRooms] = useState([]);
   const [selectedFloor, setSelectedFloor] = useState(null);
   const [floors, setFloors] = useState([]);
@@ -117,7 +118,6 @@ const RoomSelection = ({ onRoomSelected, onCancel }) => {
           <h1 className="text-3xl font-bold text-gray-900">Chọn phòng ở KTX</h1>
           <p className="text-gray-600">Chọn giới tính, loại phòng và tòa bạn muốn ở</p>
         </div>
-
         <div className="mb-4">
           <button
             onClick={onCancel}

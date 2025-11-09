@@ -5,7 +5,7 @@ import Select from '../../components/ui/Select';
 import FileUploadButton from '../../components/ui/FileUploadButton';
 import PageLayout from '../../components/ui/PageLayout';
 import RoomSelection from '../../components/room/RoomSelection';
-import { useNotification } from '../../components/ui/Notification';
+import { useNotification } from '../../contexts/NotificationContext';
 import ImageEditorModal from '../../components/modal/ImageEditorModal';
 import RoomDetail from "../../components/room/RoomDetail"
 import jsQR from 'jsqr';
