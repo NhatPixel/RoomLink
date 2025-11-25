@@ -231,15 +231,11 @@ const RoomRegistrationApprovalPage = ({ onSuccess, onCancel }) => {
     try {
       // Gửi một request duyệt nhiều đơn cùng lúc
       const response = await roomRegistrationApi.approveRoomRegistration(selectedRequests);
-      const result = response.data?.data || response.data;
       
-      const successMessage = response.message || response.data?.message;
-      const errorMessage = response.message || response.data?.message;
-      
-      if (successMessage) {
-        showSuccess(successMessage);
-      } else if (errorMessage) {
-        showError(errorMessage);
+      if (response.success !== false) {
+        showSuccess(response.message || response.data?.message || 'Duyệt đơn đăng ký thành công!');
+      } else {
+        showError(response.message || response.data?.message || 'Có lỗi xảy ra khi duyệt đơn.');
       }
       
       // Reload danh sách và statistics
@@ -286,16 +282,10 @@ const RoomRegistrationApprovalPage = ({ onSuccess, onCancel }) => {
       const response = await roomRegistrationApi.rejectRoomRegistration(selectedRequests, reasonsData);
       console.log('API Response:', response);
       
-      const result = response.data?.data || response.data;
-      console.log('Kết quả từ chối:', result);
-      
-      const successMessage = response.message || response.data?.message;
-      const errorMessage = response.message || response.data?.message;
-      
-      if (successMessage) {
-        showSuccess(successMessage);
-      } else if (errorMessage) {
-        showError(errorMessage);
+      if (response.success !== false) {
+        showSuccess(response.message || response.data?.message || 'Từ chối đơn đăng ký thành công!');
+      } else {
+        showError(response.message || response.data?.message || 'Có lỗi xảy ra khi từ chối đơn.');
       }
       
       setShowRejectionModal(false);
