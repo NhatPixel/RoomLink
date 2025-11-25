@@ -247,7 +247,6 @@ const RoomTransferApprovalPage = ({ onSuccess, onCancel }) => {
   };
 
   const handleViewDetail = (request) => {
-    console.log('Request detail:', request);
     setSelectedRequestDetail(request);
     setShowDetailModal(true);
   };
@@ -260,35 +259,26 @@ const RoomTransferApprovalPage = ({ onSuccess, onCancel }) => {
 
     setApproveLoading(true);
     try {
-      // Gửi một request duyệt nhiều đơn cùng lúc
       const response = await roomRegistrationApi.approveRoomMove(selectedRequests);
-      const result = response.data?.data || response.data;
       
-      const successMessage = response.message || response.data?.message;
-      const errorMessage = response.message || response.data?.message;
-      
-      if (successMessage) {
-        showSuccess(successMessage);
-      } else if (errorMessage) {
-        showError(errorMessage);
+      if (response.success !== false) {
+        showSuccess(response.message || response.data?.message || 'Duyệt đơn chuyển phòng thành công!');
+      } else {
+        showError(response.message || response.data?.message || 'Có lỗi xảy ra khi duyệt đơn.');
       }
       
-      // Reload danh sách và statistics
       await Promise.all([
         loadMoveRoomRequests(),
         loadStatistics()
       ]);
       
-      // selectedRequests sẽ được tự động loại bỏ đơn đã duyệt trong loadMoveRoomRequests
-      // Nhưng cần clear ngay để tránh hiển thị sai
       setSelectedRequests([]);
       
       if (onSuccess) {
         onSuccess();
       }
     } catch (error) {
-      const errorMessage = error.response?.data?.message || error.message || 'Có lỗi xảy ra khi duyệt đơn. Vui lòng thử lại.';
-      showError(errorMessage);
+      showError(error.response?.data?.message || error.message || 'Có lỗi xảy ra khi duyệt đơn. Vui lòng thử lại.');
     } finally {
       setApproveLoading(false);
     }
@@ -313,9 +303,9 @@ const RoomTransferApprovalPage = ({ onSuccess, onCancel }) => {
       const response = await roomRegistrationApi.rejectRoomMove(selectedRequests, reasonsData);
       
       if (response.success !== false) {
-        showSuccess(response.message || response.data?.message);
+        showSuccess(response.message || response.data?.message || 'Từ chối đơn chuyển phòng thành công!');
       } else {
-        showError(response.message || response.data?.message);
+        showError(response.message || response.data?.message || 'Có lỗi xảy ra khi từ chối đơn.');
       }
       
       setShowRejectionModal(false);
@@ -331,7 +321,7 @@ const RoomTransferApprovalPage = ({ onSuccess, onCancel }) => {
         onSuccess();
       }
     } catch (error) {
-      showError(error.response?.data?.message || error.message);
+      showError(error.response?.data?.message || error.message || 'Có lỗi xảy ra khi từ chối đơn. Vui lòng thử lại.');
     } finally {
       setRejectLoading(false);
     }

@@ -117,15 +117,6 @@ const RoomCancellationContent = ({ onSuccess, onCancel }) => {
     }
   };
 
-  // Convert date (YYYY-MM-DD) -> ISO UTC
-  const toISOStringWithOffset = (dateString) => {
-    if (!dateString) return null;
-    // Format YYYY-MM-DD từ input type="date"
-    if (typeof dateString === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
-      return new Date(`${dateString}T00:00:00`).toISOString();
-    }
-    return null;
-  };
 
   const validateForm = () => {
     const errors = {};
@@ -183,7 +174,7 @@ const RoomCancellationContent = ({ onSuccess, onCancel }) => {
 
       const requestData = {
         reason: reason,
-        checkoutDate: toISOStringWithOffset(cancellationForm.checkoutDate)
+        checkoutDate: cancellationForm.checkoutDate
       };
 
       const response = await roomRegistrationApi.cancelRoomRegistration(requestData);

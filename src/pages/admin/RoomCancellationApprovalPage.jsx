@@ -229,9 +229,9 @@ const RoomCancellationApprovalPage = ({ onSuccess, onCancel }) => {
       const response = await roomRegistrationApi.approveCancelRoom(selectedRequests);
       
       if (response.success !== false) {
-        showSuccess(response.message || response.data?.message);
+        showSuccess(response.message || response.data?.message || 'Duyệt đơn hủy phòng thành công!');
       } else {
-        showError(response.message || response.data?.message);
+        showError(response.message || response.data?.message || 'Có lỗi xảy ra khi duyệt đơn.');
       }
       
       await Promise.all([
@@ -245,7 +245,7 @@ const RoomCancellationApprovalPage = ({ onSuccess, onCancel }) => {
         onSuccess();
       }
     } catch (error) {
-      showError(error.response?.data?.message || error.message);
+      showError(error.response?.data?.message || error.message || 'Có lỗi xảy ra khi duyệt đơn. Vui lòng thử lại.');
     } finally {
       setApproveLoading(false);
     }
@@ -270,9 +270,9 @@ const RoomCancellationApprovalPage = ({ onSuccess, onCancel }) => {
       const response = await roomRegistrationApi.rejectCancelRoom(selectedRequests, reasonsData);
       
       if (response.success !== false) {
-        showSuccess(response.message || response.data?.message);
+        showSuccess(response.message || response.data?.message || 'Từ chối đơn hủy phòng thành công!');
       } else {
-        showError(response.message || response.data?.message);
+        showError(response.message || response.data?.message || 'Có lỗi xảy ra khi từ chối đơn.');
       }
       
       setShowRejectionModal(false);
@@ -288,7 +288,7 @@ const RoomCancellationApprovalPage = ({ onSuccess, onCancel }) => {
         onSuccess();
       }
     } catch (error) {
-      showError(error.response?.data?.message || error.message);
+      showError(error.response?.data?.message || error.message || 'Có lỗi xảy ra khi từ chối đơn. Vui lòng thử lại.');
     } finally {
       setRejectLoading(false);
     }

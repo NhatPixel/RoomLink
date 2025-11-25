@@ -218,9 +218,9 @@ const ExtensionApprovalPage = ({ onSuccess, onCancel }) => {
       const response = await roomRegistrationApi.approveRoomExtend(selectedRequests);
       
       if (response.success !== false) {
-        showSuccess(response.message || response.data?.message);
+        showSuccess(response.message || response.data?.message || 'Duyệt đơn gia hạn thành công!');
       } else {
-        showError(response.message || response.data?.message);
+        showError(response.message || response.data?.message || 'Có lỗi xảy ra khi duyệt đơn.');
       }
       
       await Promise.all([
@@ -260,9 +260,9 @@ const ExtensionApprovalPage = ({ onSuccess, onCancel }) => {
       const response = await roomRegistrationApi.rejectRoomExtend(selectedRequests, reasonsData);
       
       if (response.success !== false) {
-        showSuccess(response.message || response.data?.message);
+        showSuccess(response.message || response.data?.message || 'Từ chối đơn gia hạn thành công!');
       } else {
-        showError(response.message || response.data?.message);
+        showError(response.message || response.data?.message || 'Có lỗi xảy ra khi từ chối đơn.');
       }
       
       setShowRejectionModal(false);
@@ -278,7 +278,7 @@ const ExtensionApprovalPage = ({ onSuccess, onCancel }) => {
         onSuccess();
       }
     } catch (error) {
-      showError(error.response?.data?.message || error.message);
+      showError(error.response?.data?.message || error.message || 'Có lỗi xảy ra khi từ chối đơn. Vui lòng thử lại.');
     } finally {
       setRejectLoading(false);
     }
