@@ -150,8 +150,13 @@ const RoomTransferApprovalPage = ({ onSuccess, onCancel }) => {
           approvedDate: item.approvedDate,
           duration: item.duration,
           newDuration: item.newDuration,
-          // Determine status from approvedDate
-          status: item.approvedDate ? 'approved' : 'pending'
+          // Determine status from originalRegistration.status
+          // MOVE_PENDING = chưa duyệt (pending)
+          // MOVED = đã duyệt (approved)
+          status: item.status === 'MOVED' ? 'approved' : 
+                  item.status === 'MOVE_PENDING' ? 'pending' :
+                  // Fallback: use filterStatus if status not available
+                  filterStatus === 'Approved' ? 'approved' : 'pending'
         }));
         
         // Sắp xếp: ưu tiên đơn chờ duyệt (pending) lên trên
@@ -512,9 +517,6 @@ const RoomTransferApprovalPage = ({ onSuccess, onCancel }) => {
                     Chuyển từ → đến
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Chênh lệch phí
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Trạng thái
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -556,18 +558,6 @@ const RoomTransferApprovalPage = ({ onSuccess, onCancel }) => {
                         <div className="text-sm text-gray-500">
                           {formatCurrency(request.currentRoom.monthlyFee)} → {formatCurrency(request.targetRoom.monthlyFee)}
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className={`text-sm font-medium ${
-                        request.contract.feeDifference > 0 ? 'text-red-600' : 
-                        request.contract.feeDifference < 0 ? 'text-green-600' : 'text-gray-600'
-                      }`}>
-                        {request.contract.feeDifference > 0 ? '+' : ''}{formatCurrency(request.contract.feeDifference)}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {request.contract.feeDifference > 0 ? 'Thêm tiền' : 
-                         request.contract.feeDifference < 0 ? 'Hoàn tiền' : 'Không đổi'}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -668,20 +658,6 @@ const RoomTransferApprovalPage = ({ onSuccess, onCancel }) => {
                     <p className="text-sm text-gray-500">Vị trí {selectedRequestDetail.newSlotNumber}</p>
                     <p className="text-sm text-gray-500">Phí: {formatCurrency(selectedRequestDetail.targetRoom.monthlyFee)}/tháng</p>
                   </div>
-                  {selectedRequestDetail.contract.feeDifference !== 0 && (
-                    <div className="col-span-2">
-                      <label className="block text-sm font-medium text-gray-700">Chênh lệch phí</label>
-                      <p className={`text-lg font-semibold ${
-                        selectedRequestDetail.contract.feeDifference > 0 ? 'text-red-600' : 'text-green-600'
-                      }`}>
-                        {selectedRequestDetail.contract.feeDifference > 0 ? '+' : ''}
-                        {formatCurrency(selectedRequestDetail.contract.feeDifference)}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {selectedRequestDetail.contract.feeDifference > 0 ? 'Sinh viên cần thanh toán thêm' : 'Sinh viên được hoàn tiền'}
-                      </p>
-                    </div>
-                  )}
                   {selectedRequestDetail.newDuration && (
                     <div>
                       <label className="block text-sm font-medium text-gray-700">Thời hạn thuê mới</label>
