@@ -220,7 +220,7 @@ const RoomCancellationContent = ({ onSuccess, onCancel }) => {
 
   const formatCurrency = (amount) => {
     if (!amount) return '-';
-    const numAmount = parseFloat(amount) * 1000;
+    const numAmount = parseFloat(amount);
     return new Intl.NumberFormat('vi-VN', {
       style: 'currency',
       currency: 'VND',

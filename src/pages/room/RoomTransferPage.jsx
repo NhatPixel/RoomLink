@@ -2,9 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotification } from '../../contexts/NotificationContext';
 import Button from '../../components/ui/Button';
-import Pagination from '../../components/ui/Pagination';
 import LoadingState from '../../components/ui/LoadingState';
 import InfoBox from '../../components/ui/InfoBox';
+import RoomSelection from '../../components/room/RoomSelection';
 import roomRegistrationApi from '../../api/roomRegistrationApi';
 import roomApi from '../../api/roomApi';
 
@@ -37,21 +37,9 @@ const RoomTransferContent = ({ onSuccess, onCancel }) => {
   const [roomData, setRoomData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showRoomSelection, setShowRoomSelection] = useState(false);
-  const [availableRooms, setAvailableRooms] = useState([]);
-  const [roomsLoading, setRoomsLoading] = useState(false);
-  const [selectedRoom, setSelectedRoom] = useState(null);
-  const [selectedSlot, setSelectedSlot] = useState(null);
-  const [duration, setDuration] = useState(6); // Default 6 months
+  const [selectedRoomData, setSelectedRoomData] = useState(null); // { room, slotId, duration }
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(6);
-  const [roomTypes, setRoomTypes] = useState([]);
-  const [filters, setFilters] = useState({
-    roomTypeId: '',
-    status: 'available'
-  });
-  const [filteredRooms, setFilteredRooms] = useState([]);
 
   // Fetch current room data
   useEffect(() => {
@@ -82,89 +70,6 @@ const RoomTransferContent = ({ onSuccess, onCancel }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Fetch room types
-  useEffect(() => {
-    const fetchRoomTypes = async () => {
-      try {
-        const response = await roomApi.getRoomType();
-        if (response.success && response.data) {
-          setRoomTypes(response.data || []);
-        }
-      } catch (err) {
-        console.error('Error fetching room types:', err);
-      }
-    };
-    fetchRoomTypes();
-  }, []);
-
-  // Fetch available rooms when showing room selection
-  useEffect(() => {
-    if (showRoomSelection && filters.roomTypeId) {
-      fetchAvailableRooms();
-    }
-  }, [showRoomSelection, filters.roomTypeId]);
-
-  const fetchAvailableRooms = async () => {
-    try {
-      setRoomsLoading(true);
-      const response = await roomApi.getRoom({
-        roomTypeId: filters.roomTypeId
-      });
-      
-      if (response.success && response.data) {
-        // Transform API response
-        const transformed = response.data.map(room => {
-          const availableSlots = room.roomSlots?.filter(slot => !slot.isOccupied) || [];
-          const occupiedSlots = room.roomSlots?.filter(slot => slot.isOccupied) || [];
-          
-          return {
-            id: room.id,
-            roomNumber: room.roomNumber,
-            roomType: room.roomType_type || 'N/A',
-            roomTypeId: room.roomTypeId,
-            monthlyFee: room.monthlyFee,
-            capacity: room.capacity,
-            floor: room.floor_number || 0,
-            amenities: room.roomType_amenities || [],
-            status: availableSlots.length > 0 ? 'available' : 'occupied',
-            availableSlots: availableSlots,
-            occupiedSlots: occupiedSlots,
-            totalSlots: room.roomSlots?.length || 0,
-            currentOccupancy: occupiedSlots.length
-          };
-        });
-
-        // Filter out current room
-        const filtered = transformed.filter(room => {
-          if (!roomData) return true;
-          return room.roomNumber !== roomData.roomNumber;
-        });
-
-        setAvailableRooms(filtered);
-        setFilteredRooms(filtered);
-      }
-    } catch (err) {
-      console.error('Error fetching available rooms:', err);
-      showError('Không thể tải danh sách phòng. Vui lòng thử lại.');
-    } finally {
-      setRoomsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    // Calculate pagination for filtered rooms
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    setFilteredRooms(availableRooms.slice(startIndex, endIndex));
-  }, [availableRooms, currentPage, itemsPerPage]);
-
-  const handleFilterChange = (name, value) => {
-    setFilters(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    setCurrentPage(1);
-  };
 
   const handleTransferRequest = () => {
     if (!roomData) {
@@ -173,42 +78,29 @@ const RoomTransferContent = ({ onSuccess, onCancel }) => {
     }
     setShowRoomSelection(true);
     setError('');
+    setSelectedRoomData(null);
   };
 
-  const handleRoomSelect = (room) => {
+  const handleRoomSelected = (data) => {
+    // data contains: { room, slotId, duration }
     // Check if selected room is the same as current room
-    if (room.roomNumber === roomData?.roomNumber) {
-      setError('Phòng bạn chọn trùng với phòng hiện tại. Vui lòng chọn phòng khác.');
+    if (data.room.roomNumber === roomData?.roomNumber) {
+      showError('Phòng bạn chọn trùng với phòng hiện tại. Vui lòng chọn phòng khác.');
       return;
     }
 
-    // Check if room has available slots
-    if (room.status !== 'available' || room.availableSlots.length === 0) {
-      setError('Phòng hiện tại đã đủ người, vui lòng chọn phòng khác.');
-      return;
-    }
-
-    // If only one slot available, auto-select it
-    if (room.availableSlots.length === 1) {
-      setSelectedSlot(room.availableSlots[0]);
-    }
-
-    setSelectedRoom(room);
+    setSelectedRoomData(data);
     setError('');
   };
 
-  const handleSlotSelect = (slot) => {
-    setSelectedSlot(slot);
+  const handleBackToRoomSelection = () => {
+    setSelectedRoomData(null);
+    setError('');
   };
 
   const handleTransferConfirm = async () => {
-    if (!selectedRoom) {
+    if (!selectedRoomData) {
       setError('Vui lòng chọn phòng để chuyển');
-      return;
-    }
-
-    if (!selectedSlot) {
-      setError('Vui lòng chọn vị trí giường trong phòng');
       return;
     }
 
@@ -218,12 +110,16 @@ const RoomTransferContent = ({ onSuccess, onCancel }) => {
     try {
       // Gọi API để yêu cầu chuyển phòng
       const response = await roomRegistrationApi.requestRoomMove({
-        roomSlotId: selectedSlot.id,
-        duration: duration
+        roomSlotId: selectedRoomData.slotId,
+        duration: Number(selectedRoomData.duration)
       });
 
       if (response.success) {
-        showSuccess(`Đơn yêu cầu chuyển phòng đã được gửi thành công! Từ phòng: ${roomData?.roomNumber} → Đến phòng: ${selectedRoom.roomNumber}, vị trí giường ${selectedSlot.slotNumber}. Đơn sẽ được xem xét và duyệt bởi quản trị viên.`);
+        // Find slot number from room data
+        const selectedSlot = selectedRoomData.room.roomSlots?.find(slot => slot.id === selectedRoomData.slotId);
+        const slotNumber = selectedSlot?.slotNumber || 'N/A';
+        
+        showSuccess(`Đơn yêu cầu chuyển phòng đã được gửi thành công! Từ phòng: ${roomData?.roomNumber} → Đến phòng: ${selectedRoomData.room.roomNumber}, vị trí giường ${slotNumber}. Đơn sẽ được xem xét và duyệt bởi quản trị viên.`);
         
         if (onSuccess) {
           onSuccess();
@@ -241,19 +137,13 @@ const RoomTransferContent = ({ onSuccess, onCancel }) => {
 
   const handleBackToContract = () => {
     setShowRoomSelection(false);
-    setSelectedRoom(null);
-    setSelectedSlot(null);
+    setSelectedRoomData(null);
     setError('');
-    setCurrentPage(1);
-  };
-
-  const handlePageChange = (page) => {
-    setCurrentPage(page);
   };
 
   const formatPrice = (price) => {
     if (!price) return '-';
-    const numAmount = parseFloat(price) * 1000;
+    const numAmount = parseFloat(price);
     return new Intl.NumberFormat('vi-VN', {
       style: 'currency',
       currency: 'VND',
@@ -270,26 +160,6 @@ const RoomTransferContent = ({ onSuccess, onCancel }) => {
       month: '2-digit',
       day: '2-digit'
     });
-  };
-
-  const getRoomStatusColor = (room) => {
-    if (room.status === 'occupied' || room.availableSlots.length === 0) {
-      return 'bg-red-100 text-red-800';
-    } else if (room.currentOccupancy > 0) {
-      return 'bg-yellow-100 text-yellow-800';
-    } else {
-      return 'bg-green-100 text-green-800';
-    }
-  };
-
-  const getRoomStatusText = (room) => {
-    if (room.status === 'occupied' || room.availableSlots.length === 0) {
-      return 'Đã đủ người';
-    } else if (room.currentOccupancy > 0) {
-      return `Còn ${room.availableSlots.length} chỗ`;
-    } else {
-      return 'Còn trống';
-    }
   };
 
   if (loading) {
@@ -325,238 +195,136 @@ const RoomTransferContent = ({ onSuccess, onCancel }) => {
   }
 
   if (showRoomSelection) {
-    const totalPages = Math.ceil(availableRooms.length / itemsPerPage);
-    const paginatedRooms = availableRooms.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-
-    return (
-      <div className="min-h-screen bg-gray-50 py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">Chọn phòng mới</h1>
-            <p className="mt-2 text-gray-600">Chọn phòng bạn muốn chuyển đến</p>
-            <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4 max-w-md mx-auto">
-              <p className="text-sm text-blue-800">
-                <span className="font-semibold">Phòng hiện tại:</span> {roomData.roomNumber} ({roomData.roomType?.type || 'N/A'})
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-            {/* Filters Sidebar */}
-            <div className="lg:col-span-1">
-              <div className="bg-white rounded-lg shadow-md p-6 sticky top-8">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Bộ lọc</h3>
-                
-                <div className="space-y-4">
-                  {/* Room Type Filter */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Loại phòng
-                    </label>
-                    <select
-                      value={filters.roomTypeId}
-                      onChange={(e) => handleFilterChange('roomTypeId', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value="">Chọn loại phòng</option>
-                      {roomTypes.map(type => (
-                        <option key={type.id} value={type.id}>{type.type}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Duration Selection */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Thời hạn thuê (tháng)
-                    </label>
-                    <select
-                      value={duration}
-                      onChange={(e) => setDuration(Number(e.target.value))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    >
-                      <option value={3}>3 tháng</option>
-                      <option value={6}>6 tháng</option>
-                      <option value={12}>12 tháng</option>
-                      <option value={24}>24 tháng</option>
-                    </select>
-                  </div>
-                </div>
-
-                {!filters.roomTypeId && (
-                  <InfoBox
-                    type="info"
-                    messages={['Vui lòng chọn loại phòng để xem danh sách phòng có sẵn.']}
-                    className="mt-4"
-                  />
-                )}
+    // Nếu đã chọn phòng, hiển thị form xác nhận
+    if (selectedRoomData) {
+      const selectedSlot = selectedRoomData.room.roomSlots?.find(slot => slot.id === selectedRoomData.slotId);
+      const slotNumber = selectedSlot?.slotNumber || 'N/A';
+      
+      return (
+        <div className="min-h-screen bg-gray-50 py-8">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="bg-white rounded-lg shadow-md p-6 mb-6">
+              <div className="flex items-center gap-4 mb-4">
+                <Button
+                  variant="ghost"
+                  size="small"
+                  onClick={handleBackToRoomSelection}
+                  icon={
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  }
+                  className="mr-4"
+                >
+                  Quay lại chọn phòng
+                </Button>
+                <h2 className="text-2xl font-bold text-gray-900">Xác nhận chuyển phòng</h2>
               </div>
-            </div>
 
-            {/* Room List */}
-            <div className="lg:col-span-3">
-              <div className="bg-white rounded-lg shadow-md">
-                <div className="p-6 border-b border-gray-200">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-lg font-semibold text-gray-900">
-                      Danh sách phòng ({availableRooms.length} phòng)
-                    </h3>
-                    {selectedRoom && (
-                      <div className="text-sm text-blue-600 font-medium">
-                        Đã chọn: {selectedRoom.roomNumber}
-                      </div>
-                    )}
+              <div className="space-y-6">
+                {/* Thông tin phòng hiện tại */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-3">Phòng hiện tại</h3>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium text-gray-600">Số phòng:</span>
+                      <p className="text-gray-900">{roomData.roomNumber}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600">Vị trí giường:</span>
+                      <p className="text-gray-900">Giường {roomData.mySlotNumber}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600">Loại phòng:</span>
+                      <p className="text-gray-900">{roomData.roomType?.type || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600">Phí hàng tháng:</span>
+                      <p className="text-gray-900">{formatPrice(roomData.monthlyFee)}</p>
+                    </div>
                   </div>
                 </div>
 
-                <div className="p-6">
-                  {roomsLoading ? (
-                    <LoadingState isLoading={true} loadingText="Đang tải danh sách phòng..." className="py-12" />
-                  ) : availableRooms.length === 0 ? (
-                    <div className="text-center py-12">
-                      <div className="text-gray-400 text-6xl mb-4">🏠</div>
-                      <h3 className="text-lg font-medium text-gray-900 mb-2">
-                        {filters.roomTypeId ? 'Không tìm thấy phòng phù hợp' : 'Vui lòng chọn loại phòng'}
-                      </h3>
-                      <p className="text-gray-500">
-                        {filters.roomTypeId ? 'Hãy thử thay đổi bộ lọc để tìm phòng khác' : 'Chọn loại phòng ở bộ lọc bên trái để xem danh sách phòng có sẵn'}
+                {/* Thông tin phòng mới */}
+                <div className="bg-blue-50 p-4 rounded-lg">
+                  <h3 className="text-lg font-semibold text-gray-800 mb-3">Phòng mới</h3>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium text-gray-600">Số phòng:</span>
+                      <p className="text-gray-900">{selectedRoomData.room.roomNumber}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600">Vị trí giường:</span>
+                      <p className="text-gray-900">Giường {slotNumber}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600">Loại phòng:</span>
+                      <p className="text-gray-900">{selectedRoomData.room.roomType_type || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600">Phí hàng tháng:</span>
+                      <p className="text-gray-900">{formatPrice(selectedRoomData.room.monthlyFee)}</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600">Thời hạn thuê:</span>
+                      <p className="text-gray-900">{selectedRoomData.duration} tháng</p>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-600">Chênh lệch phí:</span>
+                      <p className={`font-semibold ${
+                        (selectedRoomData.room.monthlyFee - roomData.monthlyFee) > 0 ? 'text-red-600' : 
+                        (selectedRoomData.room.monthlyFee - roomData.monthlyFee) < 0 ? 'text-green-600' : 'text-gray-600'
+                      }`}>
+                        {(selectedRoomData.room.monthlyFee - roomData.monthlyFee) > 0 ? '+' : ''}
+                        {formatPrice(selectedRoomData.room.monthlyFee - roomData.monthlyFee)}
                       </p>
                     </div>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      {paginatedRooms.map((room) => (
-                        <div
-                          key={room.id}
-                          className={`border rounded-lg p-4 cursor-pointer transition-all ${
-                            selectedRoom?.id === room.id
-                              ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
-                              : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
-                          } ${
-                            room.status === 'occupied' || room.availableSlots.length === 0
-                              ? 'opacity-60 cursor-not-allowed'
-                              : ''
-                          }`}
-                          onClick={() => handleRoomSelect(room)}
-                        >
-                          <div className="flex justify-between items-start mb-3">
-                            <div>
-                              <h4 className="text-lg font-semibold text-gray-900">
-                                {room.roomNumber}
-                              </h4>
-                              <p className="text-sm text-gray-600">
-                                Tầng {room.floor}
-                              </p>
-                            </div>
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getRoomStatusColor(room)}`}>
-                              {getRoomStatusText(room)}
-                            </span>
-                          </div>
+                  </div>
+                </div>
 
-                          <div className="space-y-2 mb-4">
-                            <div className="flex justify-between text-sm">
-                              <span className="text-gray-600">Loại phòng:</span>
-                              <span className="font-medium">{room.roomType}</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                              <span className="text-gray-600">Sức chứa:</span>
-                              <span className="font-medium">{room.currentOccupancy}/{room.capacity} người</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                              <span className="text-gray-600">Giá thuê:</span>
-                              <span className="font-medium text-green-600">{formatPrice(room.monthlyFee)}/tháng</span>
-                            </div>
-                          </div>
+                {error && (
+                  <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm">
+                    {error}
+                  </div>
+                )}
 
-                          {room.amenities && room.amenities.length > 0 && (
-                            <div className="mb-4">
-                              <p className="text-sm text-gray-600 mb-2">Tiện nghi:</p>
-                              <div className="flex flex-wrap gap-1">
-                                {room.amenities.map((amenity, index) => (
-                                  <span
-                                    key={index}
-                                    className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded"
-                                  >
-                                    {amenity}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {selectedRoom?.id === room.id && room.availableSlots.length > 0 && (
-                            <div className="mt-4 pt-4 border-t border-gray-200">
-                              <p className="text-sm font-medium text-gray-700 mb-2">Chọn vị trí giường:</p>
-                              <div className="grid grid-cols-3 gap-2">
-                                {room.availableSlots.map((slot) => (
-                                  <button
-                                    key={slot.id}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleSlotSelect(slot);
-                                    }}
-                                    className={`px-3 py-2 rounded-md text-sm font-medium transition-all ${
-                                      selectedSlot?.id === slot.id
-                                        ? 'bg-blue-600 text-white'
-                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                                    }`}
-                                  >
-                                    Giường {slot.slotNumber}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                <div className="flex justify-end gap-4 pt-4 border-t border-gray-200">
+                  <Button
+                    variant="outline"
+                    onClick={handleBackToRoomSelection}
+                    disabled={isSubmitting}
+                  >
+                    Quay lại
+                  </Button>
+                  <Button
+                    variant="success"
+                    onClick={handleTransferConfirm}
+                    loading={isSubmitting}
+                    loadingText="Đang gửi đơn..."
+                  >
+                    Xác nhận chuyển phòng
+                  </Button>
                 </div>
               </div>
             </div>
           </div>
-
-          {/* Pagination */}
-          {availableRooms.length > itemsPerPage && (
-            <div className="mt-8">
-              <Pagination
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={handlePageChange}
-                itemsPerPage={itemsPerPage}
-                totalItems={availableRooms.length}
-              />
-            </div>
-          )}
-
-          {error && (
-            <div className="mt-6 bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm text-center">
-              {error}
-            </div>
-          )}
-
-          {/* Action Buttons */}
-          <div className="mt-8 flex justify-between">
-            <Button
-              variant="outline"
-              onClick={handleBackToContract}
-              disabled={isSubmitting}
-            >
-              Quay lại
-            </Button>
-            
-            {selectedRoom && selectedSlot && (
-              <Button
-                variant="success"
-                onClick={handleTransferConfirm}
-                loading={isSubmitting}
-                loadingText="Đang gửi đơn..."
-              >
-                Xác nhận chuyển đến {selectedRoom.roomNumber} - Giường {selectedSlot.slotNumber}
-              </Button>
-            )}
-          </div>
         </div>
+      );
+    }
+
+    // Hiển thị RoomSelection component
+    return (
+      <div>
+        <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="text-sm text-blue-800">
+            <span className="font-semibold">Phòng hiện tại:</span> {roomData.roomNumber} ({roomData.roomType?.type || 'N/A'})
+          </p>
+        </div>
+        <RoomSelection
+          onRoomSelected={handleRoomSelected}
+          onCancel={handleBackToContract}
+          excludeRoomNumber={roomData.roomNumber}
+        />
       </div>
     );
   }

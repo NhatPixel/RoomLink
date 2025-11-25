@@ -10,7 +10,7 @@ import four_bed from "../../assets/4bed.png";
 import six_bed from "../../assets/6bed.png";
 import eight_bed from "../../assets/8bed.png";
 
-const RoomSelection = ({ onRoomSelected, onCancel }) => {
+const RoomSelection = ({ onRoomSelected, onCancel, excludeRoomNumber }) => {
   const [filters, setFilters] = useState({
     gender: "",
     building: "",
@@ -85,8 +85,14 @@ const RoomSelection = ({ onRoomSelected, onCancel }) => {
       setIsLoading(true);
       const res = await roomApi.getRoom({ roomTypeId, buildingId });
       if (res.success) {
-        setRooms(res.data);
-        const uniqueFloors = [...new Set(res.data.map(r => r.floor_number))].sort((a, b) => a - b);
+        // Filter out excluded room if provided
+        let filteredRooms = res.data;
+        if (excludeRoomNumber) {
+          filteredRooms = res.data.filter(room => room.roomNumber !== excludeRoomNumber);
+        }
+        
+        setRooms(filteredRooms);
+        const uniqueFloors = [...new Set(filteredRooms.map(r => r.floor_number))].sort((a, b) => a - b);
         setFloors(uniqueFloors);
 
         if (uniqueFloors.length > 0) {

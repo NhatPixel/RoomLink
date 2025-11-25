@@ -108,7 +108,7 @@ const RoomExtension = ({ onSuccess, onCancel }) => {
 
   const formatPrice = (price) => {
     if (!price) return '-';
-    const numAmount = parseFloat(price) * 1000;
+    const numAmount = parseFloat(price);
     return new Intl.NumberFormat('vi-VN', {
       style: 'currency',
       currency: 'VND',
