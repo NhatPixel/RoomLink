@@ -313,19 +313,16 @@ const RoomTransferContent = ({ onSuccess, onCancel }) => {
     }
 
     // Hiển thị RoomSelection component
+    // Lấy gender từ user context (user.gender từ GetUserResponse)
+    const userGender = user?.gender;
+    
     return (
-      <div>
-        <div className="mb-4 bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <p className="text-sm text-blue-800">
-            <span className="font-semibold">Phòng hiện tại:</span> {roomData.roomNumber} ({roomData.roomType?.type || 'N/A'})
-          </p>
-        </div>
-        <RoomSelection
-          onRoomSelected={handleRoomSelected}
-          onCancel={handleBackToContract}
-          excludeRoomNumber={roomData.roomNumber}
-        />
-      </div>
+      <RoomSelection
+        onRoomSelected={handleRoomSelected}
+        onCancel={handleBackToContract}
+        excludeRoomNumber={roomData.roomNumber}
+        fixedGender={userGender}
+      />
     );
   }
 

@@ -10,9 +10,9 @@ import four_bed from "../../assets/4bed.png";
 import six_bed from "../../assets/6bed.png";
 import eight_bed from "../../assets/8bed.png";
 
-const RoomSelection = ({ onRoomSelected, onCancel, excludeRoomNumber }) => {
+const RoomSelection = ({ onRoomSelected, onCancel, excludeRoomNumber, fixedGender }) => {
   const [filters, setFilters] = useState({
-    gender: "",
+    gender: fixedGender || "",
     building: "",
     roomType: "",
   });
@@ -44,6 +44,13 @@ const RoomSelection = ({ onRoomSelected, onCancel, excludeRoomNumber }) => {
   useEffect(() => {
     fetchRoomTypes();
   }, []);
+
+  // Auto-fetch buildings if fixedGender is provided
+  useEffect(() => {
+    if (fixedGender && filters.roomType) {
+      fetchBuildings(fixedGender, filters.roomType);
+    }
+  }, [fixedGender, filters.roomType]);
 
   useEffect(() => {
     if (filters.gender && filters.roomType) {
@@ -340,20 +347,32 @@ const RoomSelection = ({ onRoomSelected, onCancel, excludeRoomNumber }) => {
               
               <div className="space-y-4">
                 {/* Giới tính */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Giới tính
-                  </label>
-                  <Select
-                    name="gender"
-                    value={filters.gender}
-                    onChange={(e) => handleFilterChange("gender", e.target.value)}
-                  >
-                    <option value="">Chọn giới tính</option>
-                    <option value="male">Nam</option>
-                    <option value="female">Nữ</option>
-                  </Select>
-                </div>
+                {!fixedGender && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Giới tính
+                    </label>
+                    <Select
+                      name="gender"
+                      value={filters.gender}
+                      onChange={(e) => handleFilterChange("gender", e.target.value)}
+                    >
+                      <option value="">Chọn giới tính</option>
+                      <option value="male">Nam</option>
+                      <option value="female">Nữ</option>
+                    </Select>
+                  </div>
+                )}
+                {fixedGender && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Giới tính
+                    </label>
+                    <div className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-md text-gray-700">
+                      {fixedGender === 'male' ? 'Nam' : 'Nữ'}
+                    </div>
+                  </div>
+                )}
 
                 {/* Loại phòng */}
                 <div>
