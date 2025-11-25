@@ -160,16 +160,23 @@ const RoomTransferContent = ({ onSuccess, onCancel }) => {
   };
 
 
+  // Nếu đang chọn phòng và chưa chọn phòng cụ thể, hiển thị RoomSelection full width
+  if (showRoomSelection && !selectedRoomData && !loading && roomData) {
+    return (
+      <RoomSelection
+        onRoomSelected={handleRoomSelected}
+        onCancel={handleBackToContract}
+        excludeRoomNumber={roomData?.roomNumber}
+        fixedGender={user?.gender}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header - Luôn hiển thị */}
-        {showRoomSelection ? (
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900">Chọn phòng mới</h1>
-            <p className="mt-2 text-gray-600">Chọn phòng và vị trí bạn muốn chuyển đến</p>
-          </div>
-        ) : (
+        {/* Header - Chỉ hiển thị khi không phải đang chọn phòng */}
+        {!showRoomSelection && (
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900">Chuyển phòng ở KTX</h1>
             <p className="mt-2 text-gray-600">Chuyển từ phòng hiện tại sang phòng khác</p>
@@ -202,90 +209,80 @@ const RoomTransferContent = ({ onSuccess, onCancel }) => {
               </Button>
             </div>
           </div>
-        ) : showRoomSelection ? (
-          <>
-            {!selectedRoomData ? (
-              <RoomSelection
-                onRoomSelected={handleRoomSelected}
-                onCancel={handleBackToContract}
-                excludeRoomNumber={roomData?.roomNumber}
-              />
-            ) : (
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <h2 className="text-xl font-semibold text-gray-900 mb-4">Xác nhận chuyển phòng</h2>
-                
-                <div className="space-y-6">
-                  {/* Current Room Info */}
-                  <div className="bg-gray-50 rounded-lg p-4">
-                    <h3 className="font-semibold text-gray-900 mb-3">Phòng hiện tại</h3>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <span className="text-gray-600">Số phòng:</span>
-                        <span className="ml-2 font-medium">{roomData.roomNumber}</span>
-                      </div>
-                      <div>
-                        <span className="text-gray-600">Phí hàng tháng:</span>
-                        <span className="ml-2 font-medium">{formatPrice(roomData.monthlyFee)}</span>
-                      </div>
-                    </div>
+        ) : showRoomSelection && selectedRoomData ? (
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Xác nhận chuyển phòng</h2>
+            
+            <div className="space-y-6">
+              {/* Current Room Info */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h3 className="font-semibold text-gray-900 mb-3">Phòng hiện tại</h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-600">Số phòng:</span>
+                    <span className="ml-2 font-medium">{roomData.roomNumber}</span>
                   </div>
-
-                  {/* Selected Room Info */}
-                  <div className="bg-blue-50 rounded-lg p-4">
-                    <h3 className="font-semibold text-blue-900 mb-3">Phòng mới</h3>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <span className="text-blue-700">Số phòng:</span>
-                        <span className="ml-2 font-medium text-blue-900">{selectedRoomData.room.roomNumber}</span>
-                      </div>
-                      <div>
-                        <span className="text-blue-700">Loại phòng:</span>
-                        <span className="ml-2 font-medium text-blue-900">{selectedRoomData.room.roomType_type || 'N/A'}</span>
-                      </div>
-                      <div>
-                        <span className="text-blue-700">Vị trí giường:</span>
-                        <span className="ml-2 font-medium text-blue-900">
-                          Giường {selectedRoomData.room.roomSlots?.find(slot => slot.id === selectedRoomData.slotId)?.slotNumber || 'N/A'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-blue-700">Phí hàng tháng:</span>
-                        <span className="ml-2 font-medium text-blue-900">{formatPrice(selectedRoomData.room.monthlyFee)}</span>
-                      </div>
-                      <div>
-                        <span className="text-blue-700">Thời hạn thuê:</span>
-                        <span className="ml-2 font-medium text-blue-900">{selectedRoomData.duration} tháng</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {error && (
-                    <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm">
-                      {error}
-                    </div>
-                  )}
-
-                  <div className="flex justify-between">
-                    <Button
-                      variant="outline"
-                      onClick={handleBackToRoomSelection}
-                      disabled={isSubmitting}
-                    >
-                      Quay lại
-                    </Button>
-                    <Button
-                      variant="primary"
-                      onClick={handleTransferConfirm}
-                      loading={isSubmitting}
-                      loadingText="Đang gửi đơn..."
-                    >
-                      Xác nhận chuyển phòng
-                    </Button>
+                  <div>
+                    <span className="text-gray-600">Phí hàng tháng:</span>
+                    <span className="ml-2 font-medium">{formatPrice(roomData.monthlyFee)}</span>
                   </div>
                 </div>
               </div>
-            )}
-          </>
+
+              {/* Selected Room Info */}
+              <div className="bg-blue-50 rounded-lg p-4">
+                <h3 className="font-semibold text-blue-900 mb-3">Phòng mới</h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-blue-700">Số phòng:</span>
+                    <span className="ml-2 font-medium text-blue-900">{selectedRoomData.room.roomNumber}</span>
+                  </div>
+                  <div>
+                    <span className="text-blue-700">Loại phòng:</span>
+                    <span className="ml-2 font-medium text-blue-900">{selectedRoomData.room.roomType_type || 'N/A'}</span>
+                  </div>
+                  <div>
+                    <span className="text-blue-700">Vị trí giường:</span>
+                    <span className="ml-2 font-medium text-blue-900">
+                      Giường {selectedRoomData.room.roomSlots?.find(slot => slot.id === selectedRoomData.slotId)?.slotNumber || 'N/A'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-blue-700">Phí hàng tháng:</span>
+                    <span className="ml-2 font-medium text-blue-900">{formatPrice(selectedRoomData.room.monthlyFee)}</span>
+                  </div>
+                  <div>
+                    <span className="text-blue-700">Thời hạn thuê:</span>
+                    <span className="ml-2 font-medium text-blue-900">{selectedRoomData.duration} tháng</span>
+                  </div>
+                </div>
+              </div>
+
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm">
+                  {error}
+                </div>
+              )}
+
+              <div className="flex justify-between">
+                <Button
+                  variant="outline"
+                  onClick={handleBackToRoomSelection}
+                  disabled={isSubmitting}
+                >
+                  Quay lại
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={handleTransferConfirm}
+                  loading={isSubmitting}
+                  loadingText="Đang gửi đơn..."
+                >
+                  Xác nhận chuyển phòng
+                </Button>
+              </div>
+            </div>
+          </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Current Contract Information */}
