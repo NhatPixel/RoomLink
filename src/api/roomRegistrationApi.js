@@ -81,6 +81,25 @@ const roomRegistrationApi = {
     return axiosClient.patch('/room-registrations/approve-extend', { ids });
   },
 
+  // PATCH - Từ chối đơn gia hạn phòng (nhận mảng ids và lý do)
+  // reasonsData có thể là:
+  // - { type: 'common', reason: '...' } - lý do chung
+  // - { type: 'individual', reasons: { [id]: reason } } - lý do riêng
+  rejectRoomExtend: (ids, reasonsData) => {
+    let requestData;
+    
+    if (reasonsData?.type === 'individual') {
+      // Gửi object reasons
+      requestData = { ids, reasons: reasonsData.reasons };
+    } else {
+      // Gửi reason string (backward compatible)
+      const reason = reasonsData?.reason || (typeof reasonsData === 'string' ? reasonsData : '');
+      requestData = { ids, reason };
+    }
+    
+    return axiosClient.patch('/room-registrations/reject-extend', requestData);
+  },
+
   // GET - Lấy danh sách đơn chuyển phòng (có thể filter theo status, page, limit, keyword)
   getMoveRoomRequests: (params = {}) => {
     return axiosClient.get('/room-registrations/move-requests', { params });
@@ -95,6 +114,25 @@ const roomRegistrationApi = {
   // PATCH - Duyệt đơn chuyển phòng (nhận mảng ids)
   approveRoomMove: (ids) => {
     return axiosClient.patch('/room-registrations/approve-move', { ids });
+  },
+
+  // PATCH - Từ chối đơn chuyển phòng (nhận mảng ids và lý do)
+  // reasonsData có thể là:
+  // - { type: 'common', reason: '...' } - lý do chung
+  // - { type: 'individual', reasons: { [id]: reason } } - lý do riêng
+  rejectRoomMove: (ids, reasonsData) => {
+    let requestData;
+    
+    if (reasonsData?.type === 'individual') {
+      // Gửi object reasons
+      requestData = { ids, reasons: reasonsData.reasons };
+    } else {
+      // Gửi reason string (backward compatible)
+      const reason = reasonsData?.reason || (typeof reasonsData === 'string' ? reasonsData : '');
+      requestData = { ids, reason };
+    }
+    
+    return axiosClient.patch('/room-registrations/reject-move', requestData);
   },
 };
 

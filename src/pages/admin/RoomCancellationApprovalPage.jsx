@@ -38,15 +38,12 @@ const RoomCancellationApprovalPage = ({ onSuccess, onCancel }) => {
     loadCancelRoomRequests();
   }, [filterStatus, currentPage, searchKeyword]);
 
-  // Load statistics riêng, không phụ thuộc vào filter hoặc page
   useEffect(() => {
     loadStatistics();
-  }, []); // Chỉ load một lần khi component mount
+  }, []);
 
-  // Load statistics cho tất cả đơn (không phân trang, không filter)
   const loadStatistics = async () => {
     try {
-      // Gọi 3 API riêng để lấy số liệu thống kê
       const [allResponse, unapprovedResponse, approvedResponse] = await Promise.all([
         roomRegistrationApi.getCancelRoomRequests({ status: 'All', page: 1, limit: 1 }),
         roomRegistrationApi.getCancelRoomRequests({ status: 'Unapproved', page: 1, limit: 1 }),
@@ -60,45 +57,34 @@ const RoomCancellationApprovalPage = ({ onSuccess, onCancel }) => {
       });
     } catch (error) {
       console.error('Error loading statistics:', error);
-      // Không hiển thị error để tránh làm phiền user
     }
   };
 
   const loadCancelRoomRequests = async () => {
     try {
       setLoading(true);
-      // Map frontend filter to backend status
       const statusParam = filterStatus === 'All' ? 'All' : filterStatus === 'Unapproved' ? 'Unapproved' : 'Approved';
       
       const params = {
         status: statusParam,
         page: currentPage,
         limit: itemsPerPage,
-        keyword: searchKeyword.trim() || undefined // Chỉ gửi keyword nếu có giá trị
+        keyword: searchKeyword.trim() || undefined
       };
       
       const response = await roomRegistrationApi.getCancelRoomRequests(params);
       
-      // axiosClient already returns response.data, so response is ApiResponse object
-      // ApiResponse structure: { success, data, page, limit, totalItems }
-      console.log('API Response:', response);
-      
       const data = response.data || [];
       const totalItems = response.totalItems || 0;
       
-      console.log('Parsed data:', data);
-      console.log('First item sample:', data[0]);
-      console.log('Total items:', totalItems);
-      
       if (Array.isArray(data)) {
-        // Transform API response to match component needs
         const transformed = data.map(item => ({
           id: item.id,
           studentId: item.studentId,
           userId: item.userId,
           studentName: item.name,
-          studentEmail: item.email || '', // API không trả về email, có thể lấy từ user context
-          studentPhone: item.phone || '', // API không trả về phone
+          studentEmail: item.email || '',
+          studentPhone: item.phone || '',
           studentIdNumber: item.identification || item.mssv,
           mssv: item.mssv,
           school: item.school,
@@ -109,10 +95,10 @@ const RoomCancellationApprovalPage = ({ onSuccess, onCancel }) => {
           frontIdentificationImage: item.frontIdentificationImage,
           currentRoom: {
             roomNumber: item.roomNumber || '-',
-            building: '-', // API không trả về building
-            zone: '-', // API không trả về zone
-            roomType: '-', // API không trả về roomType
-            monthlyFee: 0 // API không trả về monthlyFee
+            building: '-',
+            zone: '-',
+            roomType: '-',
+            monthlyFee: 0
           },
           slotNumber: item.slotNumber,
           cancellation: {
@@ -120,47 +106,39 @@ const RoomCancellationApprovalPage = ({ onSuccess, onCancel }) => {
             reason: item.cancellationReason || '',
             expectedMoveOutDate: item.checkoutDate || '',
             refundAmount: item.refundAmount || 0,
-            penaltyFee: 0, // API không trả về penaltyFee
+            penaltyFee: 0,
             finalRefundAmount: item.refundAmount || 0
           },
           contract: {
             contractId: item.id,
             startDate: item.registerDate || '',
             endDate: item.endDate || '',
-            deposit: 0, // API không trả về deposit
-            monthlyFee: 0, // API không trả về monthlyFee
-            totalPaid: 0, // API không trả về totalPaid
-            remainingAmount: 0 // API không trả về remainingAmount
+            deposit: 0,
+            monthlyFee: 0,
+            totalPaid: 0,
+            remainingAmount: 0
           },
           registerDate: item.registerDate,
           approvedDate: item.approvedDate,
           duration: item.duration,
           refundStatus: item.refundStatus,
-          // Map refundStatus from backend to frontend status
-          // Backend refundStatus từ CancellationInfo: 'PENDING' -> 'pending', 'APPROVED' -> 'approved', 'REJECTED'/'REJECT' -> 'rejected'
-          status: item.refundStatus === 'APPROVED' ? 'approved' : 
-                  (item.refundStatus === 'REJECTED' || item.refundStatus === 'REJECT') ? 'rejected' : 
+          status: item.status === 'REJECTED' || item.status === 'REJECT' || item.refundStatus === 'REJECTED' || item.refundStatus === 'REJECT' ? 'rejected' :
+                  item.status === 'APPROVED' || item.refundStatus === 'APPROVED' ? 'approved' : 
                   'pending'
         }));
         
-        // Sắp xếp: ưu tiên đơn chờ duyệt (pending) lên trên
         const sorted = transformed.sort((a, b) => {
-          // Đơn chờ duyệt (pending) lên trước
           if (a.status === 'pending' && b.status === 'approved') return -1;
           if (a.status === 'approved' && b.status === 'pending') return 1;
-          // Nếu cùng status, sắp xếp theo registerDate (mới nhất trước)
           return new Date(b.registerDate || 0) - new Date(a.registerDate || 0);
         });
-        
-        console.log('Transformed data:', sorted);
         setCancellationRequests(sorted);
         setTotalItems(totalItems);
         
-        // Loại bỏ những đơn đã duyệt khỏi selectedRequests sau khi load
         setSelectedRequests(prev => {
           return prev.filter(id => {
             const request = transformed.find(req => req.id === id);
-            return request && request.status !== 'approved';
+            return request && request.status !== 'approved' && request.status !== 'rejected';
           });
         });
       } else {
@@ -203,9 +181,8 @@ const RoomCancellationApprovalPage = ({ onSuccess, onCancel }) => {
   };
 
   const handleSelectRequest = (requestId) => {
-    // Không cho phép chọn đơn đã duyệt
     const request = currentRequests.find(req => req.id === requestId);
-    if (request && request.status === 'approved') {
+    if (request && (request.status === 'approved' || request.status === 'rejected')) {
       return;
     }
     
@@ -217,21 +194,16 @@ const RoomCancellationApprovalPage = ({ onSuccess, onCancel }) => {
   };
 
   const handleSelectAll = () => {
-    // Chỉ chọn những đơn chưa duyệt
-    const unapprovedRequests = currentRequests.filter(req => req.status !== 'approved');
-    const unapprovedIds = unapprovedRequests.map(req => req.id);
+    const selectableRequests = currentRequests.filter(req => req.status !== 'approved' && req.status !== 'rejected');
+    const selectableIds = selectableRequests.map(req => req.id);
+    const allSelected = selectableIds.every(id => selectedRequests.includes(id));
     
-    // Kiểm tra xem tất cả đơn chưa duyệt đã được chọn chưa
-    const allUnapprovedSelected = unapprovedIds.every(id => selectedRequests.includes(id));
-    
-    if (allUnapprovedSelected && unapprovedIds.length > 0) {
-      // Bỏ chọn tất cả
-      setSelectedRequests(prev => prev.filter(id => !unapprovedIds.includes(id)));
+    if (allSelected && selectableIds.length > 0) {
+      setSelectedRequests(prev => prev.filter(id => !selectableIds.includes(id)));
     } else {
-      // Chọn tất cả đơn chưa duyệt
       setSelectedRequests(prev => {
         const newSelection = [...prev];
-        unapprovedIds.forEach(id => {
+        selectableIds.forEach(id => {
           if (!newSelection.includes(id)) {
             newSelection.push(id);
           }
@@ -242,7 +214,6 @@ const RoomCancellationApprovalPage = ({ onSuccess, onCancel }) => {
   };
 
   const handleViewDetail = (request) => {
-    console.log('Request detail:', request);
     setSelectedRequestDetail(request);
     setShowDetailModal(true);
   };
@@ -255,35 +226,26 @@ const RoomCancellationApprovalPage = ({ onSuccess, onCancel }) => {
 
     setApproveLoading(true);
     try {
-      // Gửi một request duyệt nhiều đơn cùng lúc
       const response = await roomRegistrationApi.approveCancelRoom(selectedRequests);
-      const result = response.data?.data || response.data;
       
-      const successMessage = response.message || response.data?.message;
-      const errorMessage = response.message || response.data?.message;
-      
-      if (successMessage) {
-        showSuccess(successMessage);
-      } else if (errorMessage) {
-        showError(errorMessage);
+      if (response.success !== false) {
+        showSuccess(response.message || response.data?.message);
+      } else {
+        showError(response.message || response.data?.message);
       }
       
-      // Reload danh sách và statistics
       await Promise.all([
         loadCancelRoomRequests(),
         loadStatistics()
       ]);
       
-      // selectedRequests sẽ được tự động loại bỏ đơn đã duyệt trong loadCancelRoomRequests
-      // Nhưng cần clear ngay để tránh hiển thị sai
       setSelectedRequests([]);
       
       if (onSuccess) {
         onSuccess();
       }
     } catch (error) {
-      const errorMessage = error.response?.data?.message || error.message || 'Có lỗi xảy ra khi duyệt đơn. Vui lòng thử lại.';
-      showError(errorMessage);
+      showError(error.response?.data?.message || error.message);
     } finally {
       setApproveLoading(false);
     }
@@ -305,42 +267,28 @@ const RoomCancellationApprovalPage = ({ onSuccess, onCancel }) => {
 
     setRejectLoading(true);
     try {
-      console.log('Từ chối đơn với IDs:', selectedRequests);
-      console.log('Lý do từ chối:', reasonsData);
-      
-      // Gửi một request từ chối nhiều đơn cùng lúc (kèm lý do)
       const response = await roomRegistrationApi.rejectCancelRoom(selectedRequests, reasonsData);
-      console.log('API Response:', response);
       
-      const result = response.data?.data || response.data;
-      console.log('Kết quả từ chối:', result);
-      
-      const successMessage = response.message || response.data?.message;
-      const errorMessage = response.message || response.data?.message;
-      
-      if (successMessage) {
-        showSuccess(successMessage);
-      } else if (errorMessage) {
-        showError(errorMessage);
+      if (response.success !== false) {
+        showSuccess(response.message || response.data?.message);
+      } else {
+        showError(response.message || response.data?.message);
       }
       
       setShowRejectionModal(false);
       
-      // Reload danh sách và statistics
       await Promise.all([
         loadCancelRoomRequests(),
         loadStatistics()
       ]);
       
-      // Clear selectedRequests sau khi reload
       setSelectedRequests([]);
       
       if (onSuccess) {
         onSuccess();
       }
     } catch (error) {
-      const errorMessage = error.response?.data?.message || error.message || 'Có lỗi xảy ra khi từ chối đơn. Vui lòng thử lại.';
-      showError(errorMessage);
+      showError(error.response?.data?.message || error.message);
     } finally {
       setRejectLoading(false);
     }
@@ -479,14 +427,14 @@ const RoomCancellationApprovalPage = ({ onSuccess, onCancel }) => {
                     <input
                       type="checkbox"
                       checked={
-                        currentRequests.filter(req => req.status !== 'approved').length > 0 &&
+                        currentRequests.filter(req => req.status !== 'approved' && req.status !== 'rejected').length > 0 &&
                         currentRequests
-                          .filter(req => req.status !== 'approved')
+                          .filter(req => req.status !== 'approved' && req.status !== 'rejected')
                           .every(req => selectedRequests.includes(req.id))
                       }
                       onChange={handleSelectAll}
                       className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      disabled={currentRequests.filter(req => req.status !== 'approved').length === 0}
+                      disabled={currentRequests.filter(req => req.status !== 'approved' && req.status !== 'rejected').length === 0}
                     />
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -517,9 +465,9 @@ const RoomCancellationApprovalPage = ({ onSuccess, onCancel }) => {
                         type="checkbox"
                         checked={selectedRequests.includes(request.id)}
                         onChange={() => handleSelectRequest(request.id)}
-                        disabled={request.status === 'approved'}
+                        disabled={request.status === 'approved' || request.status === 'rejected'}
                         className={`rounded border-gray-300 text-blue-600 focus:ring-blue-500 ${
-                          request.status === 'approved' ? 'opacity-50 cursor-not-allowed' : ''
+                          request.status === 'approved' || request.status === 'rejected' ? 'opacity-50 cursor-not-allowed' : ''
                         }`}
                       />
                     </td>
@@ -701,14 +649,11 @@ const RoomCancellationApprovalPage = ({ onSuccess, onCancel }) => {
         title="Nhập lý do từ chối đơn hủy phòng"
         selectedItems={currentRequests.filter(req => selectedRequests.includes(req.id))}
         onViewDetail={(item) => {
-          // Không đóng modal từ chối, chỉ mở modal chi tiết
           handleViewDetail(item);
         }}
         onRemoveItem={(itemId) => {
-          // Bỏ đơn khỏi danh sách đã chọn
           setSelectedRequests(prev => {
             const newSelection = prev.filter(id => id !== itemId);
-            // Nếu không còn đơn nào, đóng modal từ chối
             if (newSelection.length === 0) {
               setShowRejectionModal(false);
             }

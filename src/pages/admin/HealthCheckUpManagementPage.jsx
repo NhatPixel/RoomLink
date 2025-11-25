@@ -301,42 +301,59 @@ const HealthCheckUpManagementPage = ({ onSuccess, onCancel }) => {
     };
 
     // Handle edit - switch to form view
-    const handleEdit = (healthCheck) => {
-        setSelectedHealthCheck(healthCheck);
-        // Convert dates - toDateTimeLocal returns undefined for invalid values
-        // Use undefined (not empty string) for datetime-local inputs to avoid "value contains an invalid value" error
-        const startDateValue = toDateTimeLocal(healthCheck?.startDate);
-        const endDateValue = toDateTimeLocal(healthCheck?.endDate);
-        const regStartDateValue = toDateTimeLocal(healthCheck?.registrationStartDate);
-        const regEndDateValue = toDateTimeLocal(healthCheck?.registrationEndDate);
-        
-        // Log for debugging
-        console.log("Editing health check:", {
-            rawData: healthCheck,
-            startDate: healthCheck?.startDate,
-            startDateValue,
-            endDate: healthCheck?.endDate,
-            endDateValue,
-            registrationStartDate: healthCheck?.registrationStartDate,
-            regStartDateValue,
-            registrationEndDate: healthCheck?.registrationEndDate,
-            regEndDateValue
-        });
-        
-        setFormData({
-            buildingId: healthCheck?.buildingId || "",
-            title: healthCheck?.title || "",
-            description: healthCheck?.description || "",
-            // For datetime-local, use undefined (not empty string) to avoid "value contains an invalid value" error
-            startDate: startDateValue || undefined,
-            endDate: endDateValue || undefined,
-            registrationStartDate: regStartDateValue || undefined,
-            registrationEndDate: regEndDateValue || undefined,
-            capacity: healthCheck?.capacity || "",
-            price: healthCheck?.price ? String(Math.floor(healthCheck.price)) : "",
-            status: healthCheck?.status || "active",
-        });
-        setCurrentView('form');
+    const handleEdit = async (healthCheck) => {
+        try {
+            setFormLoading(true);
+            // Fetch full details from API to ensure all fields including description are available
+            const response = await healthCheckApi.getHealthCheckById(healthCheck.id);
+            if (response.success && response.data) {
+                const fullHealthCheck = response.data;
+                setSelectedHealthCheck(fullHealthCheck);
+                
+                // Convert dates - toDateTimeLocal returns undefined for invalid values
+                // Use undefined (not empty string) for datetime-local inputs to avoid "value contains an invalid value" error
+                const startDateValue = toDateTimeLocal(fullHealthCheck?.startDate);
+                const endDateValue = toDateTimeLocal(fullHealthCheck?.endDate);
+                const regStartDateValue = toDateTimeLocal(fullHealthCheck?.registrationStartDate);
+                const regEndDateValue = toDateTimeLocal(fullHealthCheck?.registrationEndDate);
+                
+                // Log for debugging
+                console.log("Editing health check:", {
+                    rawData: fullHealthCheck,
+                    startDate: fullHealthCheck?.startDate,
+                    startDateValue,
+                    endDate: fullHealthCheck?.endDate,
+                    endDateValue,
+                    registrationStartDate: fullHealthCheck?.registrationStartDate,
+                    regStartDateValue,
+                    registrationEndDate: fullHealthCheck?.registrationEndDate,
+                    regEndDateValue,
+                    description: fullHealthCheck?.description
+                });
+                
+                setFormData({
+                    buildingId: fullHealthCheck?.buildingId || "",
+                    title: fullHealthCheck?.title || "",
+                    description: fullHealthCheck?.description || "",
+                    // For datetime-local, use undefined (not empty string) to avoid "value contains an invalid value" error
+                    startDate: startDateValue || undefined,
+                    endDate: endDateValue || undefined,
+                    registrationStartDate: regStartDateValue || undefined,
+                    registrationEndDate: regEndDateValue || undefined,
+                    capacity: fullHealthCheck?.capacity || "",
+                    price: fullHealthCheck?.price ? String(Math.floor(fullHealthCheck.price)) : "",
+                    status: fullHealthCheck?.status || "active",
+                });
+                setCurrentView('form');
+            } else {
+                showError("Không thể tải thông tin chi tiết đợt khám để chỉnh sửa");
+            }
+        } catch (err) {
+            showError(err?.response?.data?.message || "Lỗi khi tải thông tin đợt khám để chỉnh sửa");
+            console.error(err);
+        } finally {
+            setFormLoading(false);
+        }
     };
 
     // Handle create - switch to form view
@@ -672,7 +689,7 @@ const HealthCheckUpManagementPage = ({ onSuccess, onCancel }) => {
                 backText="Quay lại"
                 onBack={handleBackToList}
             >
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-6" noValidate>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Tên đợt khám */}
                     <Input

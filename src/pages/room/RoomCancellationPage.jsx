@@ -117,6 +117,13 @@ const RoomCancellationContent = ({ onSuccess, onCancel }) => {
     }
   };
 
+  // Convert datetime-local -> ISO UTC
+  const toISOStringWithOffset = (localString) => {
+    if (!localString) return null;
+    const date = new Date(localString);
+    return new Date(date.getTime()).toISOString();
+  };
+
   const validateForm = () => {
     const errors = {};
 
@@ -125,18 +132,17 @@ const RoomCancellationContent = ({ onSuccess, onCancel }) => {
     }
 
     if (!cancellationForm.checkoutDate) {
-      errors.checkoutDate = 'Vui lòng chọn ngày dự kiến trả phòng';
+      errors.checkoutDate = 'Vui lòng chọn ngày và giờ dự kiến trả phòng';
     } else {
       const checkoutDate = new Date(cancellationForm.checkoutDate);
       const today = new Date();
-      today.setHours(0, 0, 0, 0);
       const daysDifference = Math.ceil((checkoutDate - today) / (1000 * 60 * 60 * 24));
 
       if (daysDifference < 7) {
         errors.checkoutDate = 'Ngày trả phòng phải cách ngày hiện tại ít nhất 7 ngày';
       }
 
-      if (roomData && new Date(cancellationForm.checkoutDate) > new Date(roomData.endDate)) {
+      if (roomData && checkoutDate > new Date(roomData.endDate)) {
         errors.checkoutDate = 'Ngày trả phòng không được sau ngày hết hạn hợp đồng';
       }
     }
@@ -168,7 +174,7 @@ const RoomCancellationContent = ({ onSuccess, onCancel }) => {
 
       const requestData = {
         reason: reason,
-        checkoutDate: cancellationForm.checkoutDate
+        checkoutDate: toISOStringWithOffset(cancellationForm.checkoutDate)
       };
 
       const response = await roomRegistrationApi.cancelRoomRegistration(requestData);
@@ -260,13 +266,25 @@ const RoomCancellationContent = ({ onSuccess, onCancel }) => {
     const today = new Date();
     const minDate = new Date(today);
     minDate.setDate(today.getDate() + 7);
-    return minDate.toISOString().split('T')[0];
+    // Format as datetime-local: YYYY-MM-DDTHH:mm
+    const year = minDate.getFullYear();
+    const month = String(minDate.getMonth() + 1).padStart(2, '0');
+    const day = String(minDate.getDate()).padStart(2, '0');
+    const hours = String(minDate.getHours()).padStart(2, '0');
+    const minutes = String(minDate.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
 
   const getMaxCheckoutDate = () => {
     if (!roomData) return '';
     const endDate = new Date(roomData.endDate);
-    return endDate.toISOString().split('T')[0];
+    // Format as datetime-local: YYYY-MM-DDTHH:mm
+    const year = endDate.getFullYear();
+    const month = String(endDate.getMonth() + 1).padStart(2, '0');
+    const day = String(endDate.getDate()).padStart(2, '0');
+    const hours = String(endDate.getHours()).padStart(2, '0');
+    const minutes = String(endDate.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
 
   return (
@@ -374,9 +392,9 @@ const RoomCancellationContent = ({ onSuccess, onCancel }) => {
                 </Select>
 
                 <Input
-                  label="Ngày dự kiến trả phòng"
+                  label="Ngày và giờ dự kiến trả phòng"
                   name="checkoutDate"
-                  type="date"
+                  type="datetime-local"
                   value={cancellationForm.checkoutDate}
                   onChange={handleFormChange}
                   error={formErrors.checkoutDate}
@@ -564,8 +582,31 @@ const RoomCancellationContent = ({ onSuccess, onCancel }) => {
                 <span className="text-gray-900">{cancellationForm.reason}</span>
               </div>
               <div>
-                <span className="font-medium text-gray-700">Ngày trả phòng: </span>
-                <span className="text-gray-900">{formatDate(cancellationForm.checkoutDate)}</span>
+                <span className="font-medium text-gray-700">Ngày và giờ trả phòng: </span>
+                <span className="text-gray-900">
+                  {cancellationForm.checkoutDate 
+                    ? (() => {
+                        // Xử lý datetime-local format: YYYY-MM-DDTHH:mm
+                        if (typeof cancellationForm.checkoutDate === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(cancellationForm.checkoutDate)) {
+                          const [datePart, timePart] = cancellationForm.checkoutDate.split('T');
+                          const dateParts = datePart.split('-');
+                          if (dateParts.length === 3 && timePart) {
+                            const [hours, minutes] = timePart.split(':');
+                            return `${dateParts[2]}/${dateParts[1]}/${dateParts[0]} ${hours}:${minutes}`;
+                          }
+                        }
+                        // Fallback: dùng Date object
+                        const date = new Date(cancellationForm.checkoutDate);
+                        const day = String(date.getDate()).padStart(2, '0');
+                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                        const year = date.getFullYear();
+                        const hours = String(date.getHours()).padStart(2, '0');
+                        const mins = String(date.getMinutes()).padStart(2, '0');
+                        return `${day}/${month}/${year} ${hours}:${mins}`;
+                      })()
+                    : '-'
+                  }
+                </span>
               </div>
               {cancellationForm.additionalNotes && cancellationForm.additionalNotes.trim() && (
                 <div>

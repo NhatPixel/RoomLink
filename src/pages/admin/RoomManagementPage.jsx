@@ -495,7 +495,7 @@ const RoomManagementPage = ({ onSuccess, onCancel }) => {
           size="large"
         >
           <ModalBody>
-            <form onSubmit={handleSaveRoom} className="space-y-4">
+            <form onSubmit={handleSaveRoom} className="space-y-4" noValidate>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <Input
                   label="Số phòng"

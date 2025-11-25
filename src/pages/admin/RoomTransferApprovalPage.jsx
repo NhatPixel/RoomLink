@@ -38,15 +38,12 @@ const RoomTransferApprovalPage = ({ onSuccess, onCancel }) => {
     loadMoveRoomRequests();
   }, [filterStatus, currentPage, searchKeyword]);
 
-  // Load statistics riêng, không phụ thuộc vào filter hoặc page
   useEffect(() => {
     loadStatistics();
-  }, []); // Chỉ load một lần khi component mount
+  }, []);
 
-  // Load statistics cho tất cả đơn (không phân trang, không filter)
   const loadStatistics = async () => {
     try {
-      // Gọi 3 API riêng để lấy số liệu thống kê
       const [allResponse, unapprovedResponse, approvedResponse] = await Promise.all([
         roomRegistrationApi.getMoveRoomRequests({ status: 'All', page: 1, limit: 1 }),
         roomRegistrationApi.getMoveRoomRequests({ status: 'Unapproved', page: 1, limit: 1 }),
@@ -60,45 +57,34 @@ const RoomTransferApprovalPage = ({ onSuccess, onCancel }) => {
       });
     } catch (error) {
       console.error('Error loading statistics:', error);
-      // Không hiển thị error để tránh làm phiền user
     }
   };
 
   const loadMoveRoomRequests = async () => {
     try {
       setLoading(true);
-      // Map frontend filter to backend status
       const statusParam = filterStatus === 'All' ? 'All' : filterStatus === 'Unapproved' ? 'Unapproved' : 'Approved';
       
       const params = {
         status: statusParam,
         page: currentPage,
         limit: itemsPerPage,
-        keyword: searchKeyword.trim() || undefined // Chỉ gửi keyword nếu có giá trị
+        keyword: searchKeyword.trim() || undefined
       };
       
       const response = await roomRegistrationApi.getMoveRoomRequests(params);
       
-      // axiosClient already returns response.data, so response is ApiResponse object
-      // ApiResponse structure: { success, data, page, limit, totalItems }
-      console.log('API Response:', response);
-      
       const data = response.data || [];
       const totalItems = response.totalItems || 0;
       
-      console.log('Parsed data:', data);
-      console.log('First item sample:', data[0]);
-      console.log('Total items:', totalItems);
-      
       if (Array.isArray(data)) {
-        // Transform API response to match component needs
         const transformed = data.map(item => ({
           id: item.id,
           studentId: item.studentId,
           userId: item.userId,
           studentName: item.name,
-          studentEmail: item.email || '', // API không trả về email
-          studentPhone: item.phone || '', // API không trả về phone
+          studentEmail: item.email || '',
+          studentPhone: item.phone || '',
           studentIdNumber: item.identification || item.mssv,
           mssv: item.mssv,
           school: item.school,
@@ -109,9 +95,9 @@ const RoomTransferApprovalPage = ({ onSuccess, onCancel }) => {
           frontIdentificationImage: item.frontIdentificationImage,
           currentRoom: {
             roomNumber: item.roomNumber || '-',
-            building: '-', // API không trả về building
-            zone: '-', // API không trả về zone
-            roomType: '-', // API không trả về roomType
+            building: '-',
+            zone: '-',
+            roomType: '-',
             monthlyFee: item.monthlyFee || 0,
             floor: 0,
             capacity: 0,
@@ -131,7 +117,7 @@ const RoomTransferApprovalPage = ({ onSuccess, onCancel }) => {
           newSlotNumber: item.newSlotNumber,
           transfer: {
             requestDate: item.registerDate || new Date().toISOString(),
-            reason: 'Chuyển phòng', // API không trả về reason
+            reason: 'Chuyển phòng',
             expectedTransferDate: item.newEndDate || '',
             urgency: 'Bình thường',
             notes: ''
@@ -154,7 +140,9 @@ const RoomTransferApprovalPage = ({ onSuccess, onCancel }) => {
           // Determine status from originalRegistration.status
           // MOVE_PENDING = chưa duyệt (pending)
           // MOVED = đã duyệt (approved)
-          status: item.status === 'MOVED' ? 'approved' : 
+          // REJECTED/REJECT = đã từ chối (rejected)
+          status: item.status === 'REJECTED' || item.status === 'REJECT' ? 'rejected' :
+                  item.status === 'MOVED' ? 'approved' : 
                   item.status === 'MOVE_PENDING' ? 'pending' :
                   // Fallback: use filterStatus if status not available
                   filterStatus === 'Approved' ? 'approved' : 'pending'
@@ -173,11 +161,11 @@ const RoomTransferApprovalPage = ({ onSuccess, onCancel }) => {
         setTransferRequests(sorted);
         setTotalItems(totalItems);
         
-        // Loại bỏ những đơn đã duyệt khỏi selectedRequests sau khi load
+        // Loại bỏ những đơn đã duyệt hoặc đã từ chối khỏi selectedRequests sau khi load
         setSelectedRequests(prev => {
           return prev.filter(id => {
             const request = transformed.find(req => req.id === id);
-            return request && request.status !== 'approved';
+            return request && request.status !== 'approved' && request.status !== 'rejected';
           });
         });
       } else {
@@ -220,9 +208,9 @@ const RoomTransferApprovalPage = ({ onSuccess, onCancel }) => {
   };
 
   const handleSelectRequest = (requestId) => {
-    // Không cho phép chọn đơn đã duyệt
+    // Không cho phép chọn đơn đã duyệt hoặc đã từ chối
     const request = currentRequests.find(req => req.id === requestId);
-    if (request && request.status === 'approved') {
+    if (request && (request.status === 'approved' || request.status === 'rejected')) {
       return;
     }
     
@@ -234,21 +222,21 @@ const RoomTransferApprovalPage = ({ onSuccess, onCancel }) => {
   };
 
   const handleSelectAll = () => {
-    // Chỉ chọn những đơn chưa duyệt
-    const unapprovedRequests = currentRequests.filter(req => req.status !== 'approved');
-    const unapprovedIds = unapprovedRequests.map(req => req.id);
+    // Chỉ chọn những đơn chưa duyệt và chưa từ chối
+    const selectableRequests = currentRequests.filter(req => req.status !== 'approved' && req.status !== 'rejected');
+    const selectableIds = selectableRequests.map(req => req.id);
     
-    // Kiểm tra xem tất cả đơn chưa duyệt đã được chọn chưa
-    const allUnapprovedSelected = unapprovedIds.every(id => selectedRequests.includes(id));
+    // Kiểm tra xem tất cả đơn có thể chọn đã được chọn chưa
+    const allSelected = selectableIds.every(id => selectedRequests.includes(id));
     
-    if (allUnapprovedSelected && unapprovedIds.length > 0) {
+    if (allSelected && selectableIds.length > 0) {
       // Bỏ chọn tất cả
-      setSelectedRequests(prev => prev.filter(id => !unapprovedIds.includes(id)));
+      setSelectedRequests(prev => prev.filter(id => !selectableIds.includes(id)));
     } else {
-      // Chọn tất cả đơn chưa duyệt
+      // Chọn tất cả đơn có thể chọn
       setSelectedRequests(prev => {
         const newSelection = [...prev];
-        unapprovedIds.forEach(id => {
+        selectableIds.forEach(id => {
           if (!newSelection.includes(id)) {
             newSelection.push(id);
           }
@@ -322,30 +310,28 @@ const RoomTransferApprovalPage = ({ onSuccess, onCancel }) => {
 
     setRejectLoading(true);
     try {
-      console.log('Từ chối đơn với IDs:', selectedRequests);
-      console.log('Lý do từ chối:', reasonsData);
+      const response = await roomRegistrationApi.rejectRoomMove(selectedRequests, reasonsData);
       
-      // Note: Backend chưa có API reject move, có thể cần implement sau
-      // Tạm thời chỉ hiển thị thông báo
-      showError('Chức năng từ chối đơn chuyển phòng đang được phát triển. Vui lòng liên hệ quản trị viên.');
+      if (response.success !== false) {
+        showSuccess(response.message || response.data?.message);
+      } else {
+        showError(response.message || response.data?.message);
+      }
       
       setShowRejectionModal(false);
       
-      // Reload danh sách và statistics
       await Promise.all([
         loadMoveRoomRequests(),
         loadStatistics()
       ]);
       
-      // Clear selectedRequests sau khi reload
       setSelectedRequests([]);
       
       if (onSuccess) {
         onSuccess();
       }
     } catch (error) {
-      const errorMessage = error.response?.data?.message || error.message || 'Có lỗi xảy ra khi từ chối đơn. Vui lòng thử lại.';
-      showError(errorMessage);
+      showError(error.response?.data?.message || error.message);
     } finally {
       setRejectLoading(false);
     }
@@ -484,14 +470,14 @@ const RoomTransferApprovalPage = ({ onSuccess, onCancel }) => {
                     <input
                       type="checkbox"
                       checked={
-                        currentRequests.filter(req => req.status !== 'approved').length > 0 &&
+                        currentRequests.filter(req => req.status !== 'approved' && req.status !== 'rejected').length > 0 &&
                         currentRequests
-                          .filter(req => req.status !== 'approved')
+                          .filter(req => req.status !== 'approved' && req.status !== 'rejected')
                           .every(req => selectedRequests.includes(req.id))
                       }
                       onChange={handleSelectAll}
                       className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      disabled={currentRequests.filter(req => req.status !== 'approved').length === 0}
+                      disabled={currentRequests.filter(req => req.status !== 'approved' && req.status !== 'rejected').length === 0}
                     />
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -516,9 +502,9 @@ const RoomTransferApprovalPage = ({ onSuccess, onCancel }) => {
                         type="checkbox"
                         checked={selectedRequests.includes(request.id)}
                         onChange={() => handleSelectRequest(request.id)}
-                        disabled={request.status === 'approved'}
+                        disabled={request.status === 'approved' || request.status === 'rejected'}
                         className={`rounded border-gray-300 text-blue-600 focus:ring-blue-500 ${
-                          request.status === 'approved' ? 'opacity-50 cursor-not-allowed' : ''
+                          request.status === 'approved' || request.status === 'rejected' ? 'opacity-50 cursor-not-allowed' : ''
                         }`}
                       />
                     </td>

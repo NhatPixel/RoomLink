@@ -936,6 +936,7 @@ const ElectricityWaterBillCreationPage = ({ onSuccess, onCancel }) => {
         >
           <ModalBody>
             <form
+              noValidate
               onSubmit={(e) => {
                 e.preventDefault();
                 const roomId = roomMapping[editFormData.roomNumber];

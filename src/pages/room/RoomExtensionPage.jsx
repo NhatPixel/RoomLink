@@ -18,10 +18,8 @@ const RoomExtension = ({ onSuccess, onCancel }) => {
 
   // Extension options
   const extensionOptions = [
-    { value: '1-semester', label: '1 học kỳ', duration: 6 },
-    { value: '1-year', label: '1 năm', duration: 12 },
-    { value: '2-years', label: '2 năm', duration: 24 },
-    { value: '3-years', label: '3 năm', duration: 36 }
+    { value: '8-months', label: '8 tháng', duration: 8 },
+    { value: '10-months', label: '10 tháng', duration: 10 }
   ];
 
   // Fetch room data
