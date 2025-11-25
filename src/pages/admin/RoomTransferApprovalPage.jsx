@@ -1,100 +1,735 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import Pagination from '../../components/ui/Pagination';
+import { useNotification } from '../../contexts/NotificationContext';
+import { roomRegistrationApi } from '../../api';
+import PageLayout from '../../components/layout/PageLayout';
 import Button from '../../components/ui/Button';
+import Select from '../../components/ui/Select';
+import Input from '../../components/ui/Input';
+import Pagination from '../../components/ui/Pagination';
+import LoadingState from '../../components/ui/LoadingState';
 import RejectionModal from '../../components/modal/RejectionModal';
+import BaseModal, { ModalBody } from '../../components/modal/BaseModal';
 
 const RoomTransferApprovalPage = ({ onSuccess, onCancel }) => {
   const { user } = useAuth();
+  const { showSuccess, showError } = useNotification();
   const [transferRequests, setTransferRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedRequests, setSelectedRequests] = useState([]);
+  const [approveLoading, setApproveLoading] = useState(false);
+  const [rejectLoading, setRejectLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(5);
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [filterStatus, setFilterStatus] = useState('All'); // Match backend: All, Unapproved, Approved
+  const [searchKeyword, setSearchKeyword] = useState('');
+  const [totalItems, setTotalItems] = useState(0);
   const [showDetailModal, setShowDetailModal] = useState(false);
-  const [selectedRequest, setSelectedRequest] = useState(null);
+  const [selectedRequestDetail, setSelectedRequestDetail] = useState(null);
   const [showRejectionModal, setShowRejectionModal] = useState(false);
-  const [rejectionTarget, setRejectionTarget] = useState(null);
-
-  const mockTransferRequests = [
-    { id: 'TRANSFER001', studentId: 'SV001', studentName: 'Nguyễn Văn An', studentEmail: 'an.nguyen@student.hust.edu.vn', studentPhone: '0123456789', studentIdNumber: '20190001', currentRoom: { roomNumber: 'A101', building: 'Tòa A', zone: 'Khu A', roomType: 'Phòng đôi', monthlyFee: 800000, floor: 1, capacity: 2, currentOccupancy: 2 }, targetRoom: { roomNumber: 'B205', building: 'Tòa B', zone: 'Khu B', roomType: 'Phòng đơn', monthlyFee: 1200000, floor: 2, capacity: 1, currentOccupancy: 0 }, transfer: { requestDate: '2024-06-15', reason: 'Cần không gian riêng tư để học tập', expectedTransferDate: '2024-07-01', urgency: 'Bình thường', notes: 'Chuyển phòng để có không gian học tập tốt hơn' }, contract: { contractId: 'CT001', startDate: '2024-01-01', endDate: '2024-12-31', deposit: 1600000, currentMonthlyFee: 800000, newMonthlyFee: 1200000, feeDifference: 400000, totalPaid: 8000000, remainingAmount: 0 }, status: 'pending', createdAt: '2024-06-15T10:30:00Z', documents: { transferRequest: true, roomConditionReport: true, studentId: true, roomContract: true, reasonDocument: true } },
-  ];
+  const [statistics, setStatistics] = useState({
+    total: 0,
+    pending: 0,
+    approved: 0
+  });
 
   useEffect(() => {
+    loadMoveRoomRequests();
+  }, [filterStatus, currentPage, searchKeyword]);
+
+  // Load statistics riêng, không phụ thuộc vào filter hoặc page
+  useEffect(() => {
+    loadStatistics();
+  }, []); // Chỉ load một lần khi component mount
+
+  // Load statistics cho tất cả đơn (không phân trang, không filter)
+  const loadStatistics = async () => {
     try {
-      const savedRequests = JSON.parse(localStorage.getItem('roomTransferRequests') || '[]');
-      const allRequests = [...mockTransferRequests];
-      savedRequests.forEach(savedRequest => { if (!allRequests.find(req => req.id === savedRequest.id)) { allRequests.push(savedRequest); } });
-      setTransferRequests(allRequests);
-      setLoading(false);
+      // Gọi 3 API riêng để lấy số liệu thống kê
+      const [allResponse, unapprovedResponse, approvedResponse] = await Promise.all([
+        roomRegistrationApi.getMoveRoomRequests({ status: 'All', page: 1, limit: 1 }),
+        roomRegistrationApi.getMoveRoomRequests({ status: 'Unapproved', page: 1, limit: 1 }),
+        roomRegistrationApi.getMoveRoomRequests({ status: 'Approved', page: 1, limit: 1 })
+      ]);
+
+      setStatistics({
+        total: allResponse.totalItems || 0,
+        pending: unapprovedResponse.totalItems || 0,
+        approved: approvedResponse.totalItems || 0
+      });
+    } catch (error) {
+      console.error('Error loading statistics:', error);
+      // Không hiển thị error để tránh làm phiền user
+    }
+  };
+
+  const loadMoveRoomRequests = async () => {
+    try {
+      setLoading(true);
+      // Map frontend filter to backend status
+      const statusParam = filterStatus === 'All' ? 'All' : filterStatus === 'Unapproved' ? 'Unapproved' : 'Approved';
+      
+      const params = {
+        status: statusParam,
+        page: currentPage,
+        limit: itemsPerPage,
+        keyword: searchKeyword.trim() || undefined // Chỉ gửi keyword nếu có giá trị
+      };
+      
+      const response = await roomRegistrationApi.getMoveRoomRequests(params);
+      
+      // axiosClient already returns response.data, so response is ApiResponse object
+      // ApiResponse structure: { success, data, page, limit, totalItems }
+      console.log('API Response:', response);
+      
+      const data = response.data || [];
+      const totalItems = response.totalItems || 0;
+      
+      console.log('Parsed data:', data);
+      console.log('First item sample:', data[0]);
+      console.log('Total items:', totalItems);
+      
+      if (Array.isArray(data)) {
+        // Transform API response to match component needs
+        const transformed = data.map(item => ({
+          id: item.id,
+          studentId: item.studentId,
+          userId: item.userId,
+          studentName: item.name,
+          studentEmail: item.email || '', // API không trả về email
+          studentPhone: item.phone || '', // API không trả về phone
+          studentIdNumber: item.identification || item.mssv,
+          mssv: item.mssv,
+          school: item.school,
+          dob: item.dob,
+          gender: item.gender,
+          address: item.address,
+          avatar: item.avatar,
+          frontIdentificationImage: item.frontIdentificationImage,
+          currentRoom: {
+            roomNumber: item.roomNumber || '-',
+            building: '-', // API không trả về building
+            zone: '-', // API không trả về zone
+            roomType: '-', // API không trả về roomType
+            monthlyFee: item.monthlyFee || 0,
+            floor: 0,
+            capacity: 0,
+            currentOccupancy: 0
+          },
+          targetRoom: {
+            roomNumber: item.newRoomNumber || '-',
+            building: '-',
+            zone: '-',
+            roomType: '-',
+            monthlyFee: item.newMonthlyFee || 0,
+            floor: 0,
+            capacity: 0,
+            currentOccupancy: 0
+          },
+          slotNumber: item.slotNumber,
+          newSlotNumber: item.newSlotNumber,
+          transfer: {
+            requestDate: item.registerDate || new Date().toISOString(),
+            reason: 'Chuyển phòng', // API không trả về reason
+            expectedTransferDate: item.newEndDate || '',
+            urgency: 'Bình thường',
+            notes: ''
+          },
+          contract: {
+            contractId: item.id,
+            startDate: item.registerDate || '',
+            endDate: item.endDate || '',
+            deposit: 0,
+            currentMonthlyFee: item.monthlyFee || 0,
+            newMonthlyFee: item.newMonthlyFee || 0,
+            feeDifference: (item.newMonthlyFee || 0) - (item.monthlyFee || 0),
+            totalPaid: 0,
+            remainingAmount: 0
+          },
+          registerDate: item.registerDate,
+          approvedDate: item.approvedDate,
+          duration: item.duration,
+          newDuration: item.newDuration,
+          // Determine status from approvedDate
+          status: item.approvedDate ? 'approved' : 'pending'
+        }));
+        
+        // Sắp xếp: ưu tiên đơn chờ duyệt (pending) lên trên
+        const sorted = transformed.sort((a, b) => {
+          // Đơn chờ duyệt (pending) lên trước
+          if (a.status === 'pending' && b.status === 'approved') return -1;
+          if (a.status === 'approved' && b.status === 'pending') return 1;
+          // Nếu cùng status, sắp xếp theo registerDate (mới nhất trước)
+          return new Date(b.registerDate || 0) - new Date(a.registerDate || 0);
+        });
+        
+        console.log('Transformed data:', sorted);
+        setTransferRequests(sorted);
+        setTotalItems(totalItems);
+        
+        // Loại bỏ những đơn đã duyệt khỏi selectedRequests sau khi load
+        setSelectedRequests(prev => {
+          return prev.filter(id => {
+            const request = transformed.find(req => req.id === id);
+            return request && request.status !== 'approved';
+          });
+        });
+      } else {
+        console.error('Data is not an array:', data);
+      }
     } catch (error) {
       console.error('Error loading transfer requests:', error);
-      setTransferRequests(mockTransferRequests);
+      console.error('Error response:', error.response);
+      const errorMessage = error.response?.data?.message || error.message || 'Không thể tải danh sách đơn chuyển phòng';
+      showError(errorMessage);
+    } finally {
       setLoading(false);
     }
-  }, []);
+  };
 
-  const filteredRequests = transferRequests.filter(request => filterStatus === 'all' ? true : request.status === filterStatus);
-  const totalPages = Math.ceil(filteredRequests.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentRequests = filteredRequests.slice(startIndex, endIndex);
-  const handlePageChange = (page) => setCurrentPage(page);
-  const handleFilterChange = (status) => { setFilterStatus(status); setCurrentPage(1); };
-  const handleSelectRequest = (requestId) => setSelectedRequests(prev => prev.includes(requestId) ? prev.filter(id => id !== requestId) : [...prev, requestId]);
-  const handleSelectAll = () => { if (selectedRequests.length === currentRequests.length) setSelectedRequests([]); else setSelectedRequests(currentRequests.map(req => req.id)); };
-  const handleViewDetail = (request) => { setSelectedRequest(request); setShowDetailModal(true); };
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+  const currentRequests = transferRequests;
 
-  const handleApproveSelected = () => {
-    if (selectedRequests.length === 0) { alert('Vui lòng chọn ít nhất một đơn để duyệt'); return; }
-    const approvedRequests = selectedRequests.map(requestId => { const request = transferRequests.find(req => req.id === requestId); return { ...request, status: 'approved', approvedAt: new Date().toISOString(), approvedBy: user?.id || 'Admin001' }; });
-    const updatedRequests = transferRequests.map(request => selectedRequests.includes(request.id) ? { ...request, status: 'approved', approvedAt: new Date().toISOString(), approvedBy: user?.id || 'Admin001' } : request);
-    setTransferRequests(updatedRequests);
-    localStorage.setItem('roomTransferRequests', JSON.stringify(updatedRequests));
-    approvedRequests.forEach(request => { if (request.contract.feeDifference !== 0) { const adjustmentBill = { id: `ADJUSTMENT_${request.id}`, studentId: request.studentId, studentName: request.studentName, studentEmail: request.studentEmail, type: request.contract.feeDifference > 0 ? 'additional' : 'refund', amount: Math.abs(request.contract.feeDifference), description: `Điều chỉnh phí chuyển phòng từ ${request.currentRoom.roomNumber} sang ${request.targetRoom.roomNumber}`, status: 'pending', createdAt: new Date().toISOString(), dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), transferRequestId: request.id }; const existingBills = JSON.parse(localStorage.getItem('bills') || '[]'); existingBills.push(adjustmentBill); localStorage.setItem('bills', JSON.stringify(existingBills)); } });
-    alert(`Đã duyệt thành công ${selectedRequests.length} đơn chuyển phòng!`);
+  const handlePageChange = (page) => {
+    setCurrentPage(page);
     setSelectedRequests([]);
   };
 
-  const handleRejectSelected = () => { if (selectedRequests.length === 0) { alert('Vui lòng chọn ít nhất một đơn để từ chối'); return; } setRejectionTarget('selected'); setShowRejectionModal(true); };
-  const handleConfirmRejection = async (reason) => { const updatedRequests = transferRequests.map(request => selectedRequests.includes(request.id) ? { ...request, status: 'rejected', rejectedAt: new Date().toISOString(), rejectedBy: user?.id || 'Admin001', rejectionReason: reason } : request); setTransferRequests(updatedRequests); localStorage.setItem('roomTransferRequests', JSON.stringify(updatedRequests)); alert(`Đã từ chối ${selectedRequests.length} đơn chuyển phòng!`); setSelectedRequests([]); };
+  const handleFilterChange = (e) => {
+    setFilterStatus(e.target.value);
+    setCurrentPage(1);
+    setSelectedRequests([]);
+  };
 
-  const getStatusBadge = (status) => { const statusConfig = { pending: { text: 'Chờ duyệt', color: 'bg-yellow-100 text-yellow-800' }, approved: { text: 'Đã duyệt', color: 'bg-green-100 text-green-800' }, rejected: { text: 'Từ chối', color: 'bg-red-100 text-red-800' } }; const config = statusConfig[status] || statusConfig.pending; return (<span className={`px-2 py-1 rounded-full text-xs font-medium ${config.color}`}>{config.text}</span>); };
-  const getUrgencyBadge = (urgency) => { const urgencyConfig = { 'Cao': { color: 'bg-red-100 text-red-800' }, 'Bình thường': { color: 'bg-blue-100 text-blue-800' }, 'Thấp': { color: 'bg-gray-100 text-gray-800' } }; const config = urgencyConfig[urgency] || urgencyConfig['Bình thường']; return (<span className={`px-2 py-1 rounded-full text-xs font-medium ${config.color}`}>{urgency}</span>); };
-  const formatCurrency = (amount) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
-  const formatDate = (dateString) => new Date(dateString).toLocaleDateString('vi-VN');
+  const handleSearchChange = (e) => {
+    setSearchKeyword(e.target.value);
+    setCurrentPage(1); // Reset về trang 1 khi tìm kiếm
+    setSelectedRequests([]);
+  };
 
-  if (loading) { return (<div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div></div>); }
+  const handleClearSearch = () => {
+    setSearchKeyword('');
+    setCurrentPage(1);
+    setSelectedRequests([]);
+  };
+
+  const handleSelectRequest = (requestId) => {
+    // Không cho phép chọn đơn đã duyệt
+    const request = currentRequests.find(req => req.id === requestId);
+    if (request && request.status === 'approved') {
+      return;
+    }
+    
+    setSelectedRequests(prev =>
+      prev.includes(requestId)
+        ? prev.filter(id => id !== requestId)
+        : [...prev, requestId]
+    );
+  };
+
+  const handleSelectAll = () => {
+    // Chỉ chọn những đơn chưa duyệt
+    const unapprovedRequests = currentRequests.filter(req => req.status !== 'approved');
+    const unapprovedIds = unapprovedRequests.map(req => req.id);
+    
+    // Kiểm tra xem tất cả đơn chưa duyệt đã được chọn chưa
+    const allUnapprovedSelected = unapprovedIds.every(id => selectedRequests.includes(id));
+    
+    if (allUnapprovedSelected && unapprovedIds.length > 0) {
+      // Bỏ chọn tất cả
+      setSelectedRequests(prev => prev.filter(id => !unapprovedIds.includes(id)));
+    } else {
+      // Chọn tất cả đơn chưa duyệt
+      setSelectedRequests(prev => {
+        const newSelection = [...prev];
+        unapprovedIds.forEach(id => {
+          if (!newSelection.includes(id)) {
+            newSelection.push(id);
+          }
+        });
+        return newSelection;
+      });
+    }
+  };
+
+  const handleViewDetail = (request) => {
+    console.log('Request detail:', request);
+    setSelectedRequestDetail(request);
+    setShowDetailModal(true);
+  };
+
+  const handleApproveRequests = async () => {
+    if (selectedRequests.length === 0) {
+      showError('Vui lòng chọn ít nhất một đơn để duyệt');
+      return;
+    }
+
+    setApproveLoading(true);
+    try {
+      // Gửi một request duyệt nhiều đơn cùng lúc
+      const response = await roomRegistrationApi.approveRoomMove(selectedRequests);
+      const result = response.data?.data || response.data;
+      
+      const approvedCount = result.approved?.length || 0;
+      const skippedCount = result.skipped?.length || 0;
+      
+      if (approvedCount > 0) {
+        if (skippedCount > 0) {
+          showSuccess(`Đã duyệt thành công ${approvedCount} đơn. ${skippedCount} đơn bị bỏ qua.`);
+        } else {
+          showSuccess(`Đã duyệt thành công ${approvedCount} đơn chuyển phòng!`);
+        }
+      } else if (skippedCount > 0) {
+        showError(`Không thể duyệt đơn. Tất cả ${skippedCount} đơn đều bị bỏ qua.`);
+      }
+      
+      // Reload danh sách và statistics
+      await Promise.all([
+        loadMoveRoomRequests(),
+        loadStatistics()
+      ]);
+      
+      // selectedRequests sẽ được tự động loại bỏ đơn đã duyệt trong loadMoveRoomRequests
+      // Nhưng cần clear ngay để tránh hiển thị sai
+      setSelectedRequests([]);
+      
+      if (onSuccess) {
+        onSuccess();
+      }
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || error.message || 'Có lỗi xảy ra khi duyệt đơn. Vui lòng thử lại.';
+      showError(errorMessage);
+    } finally {
+      setApproveLoading(false);
+    }
+  };
+
+  const handleRejectRequests = () => {
+    if (selectedRequests.length === 0) {
+      showError('Vui lòng chọn ít nhất một đơn để từ chối');
+      return;
+    }
+    setShowRejectionModal(true);
+  };
+
+  const handleConfirmRejection = async (reasonsData) => {
+    if (selectedRequests.length === 0) {
+      showError('Vui lòng chọn ít nhất một đơn để từ chối');
+      return;
+    }
+
+    setRejectLoading(true);
+    try {
+      console.log('Từ chối đơn với IDs:', selectedRequests);
+      console.log('Lý do từ chối:', reasonsData);
+      
+      // Note: Backend chưa có API reject move, có thể cần implement sau
+      // Tạm thời chỉ hiển thị thông báo
+      showError('Chức năng từ chối đơn chuyển phòng đang được phát triển. Vui lòng liên hệ quản trị viên.');
+      
+      setShowRejectionModal(false);
+      
+      // Reload danh sách và statistics
+      await Promise.all([
+        loadMoveRoomRequests(),
+        loadStatistics()
+      ]);
+      
+      // Clear selectedRequests sau khi reload
+      setSelectedRequests([]);
+      
+      if (onSuccess) {
+        onSuccess();
+      }
+    } catch (error) {
+      const errorMessage = error.response?.data?.message || error.message || 'Có lỗi xảy ra khi từ chối đơn. Vui lòng thử lại.';
+      showError(errorMessage);
+    } finally {
+      setRejectLoading(false);
+    }
+  };
+
+  const formatCurrency = (amount) => {
+    if (!amount || amount === 0) return '-';
+    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return '-';
+    try {
+      return new Date(dateString).toLocaleDateString('vi-VN', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
+    } catch (e) {
+      return dateString;
+    }
+  };
+
+  const getStatusBadge = (status) => {
+    const statusConfig = {
+      pending: { text: 'Chờ duyệt', color: 'bg-yellow-100 text-yellow-800' },
+      approved: { text: 'Đã duyệt', color: 'bg-green-100 text-green-800' },
+      rejected: { text: 'Từ chối', color: 'bg-red-100 text-red-800' }
+    };
+    const config = statusConfig[status] || statusConfig.pending;
+    return (
+      <span className={`px-2 py-1 rounded-full text-xs font-medium ${config.color}`}>
+        {config.text}
+      </span>
+    );
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="w-full px-4 py-8">
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <div className="flex items-center justify-between mb-8"><div><h1 className="text-2xl font-bold text-gray-800">Duyệt đơn chuyển phòng KTX</h1><p className="text-gray-600 mt-1">Quản lý và duyệt các đơn chuyển phòng ký túc xá</p></div><Button onClick={onCancel} variant="ghost" size="small" icon={<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>} /></div>
-
-          {selectedRequests.length > 0 && (<div className="flex items-center space-x-4 mb-6 p-4 bg-blue-50 rounded-lg"><span className="text-blue-800 font-medium">Đã chọn {selectedRequests.length} đơn</span><Button onClick={handleApproveSelected} variant="success">Duyệt đã chọn</Button><Button onClick={handleRejectSelected} variant="danger">Từ chối đã chọn</Button></div>)}
-
-          <div className="flex items-center justify-between mb-6"><div className="flex items-center space-x-4"><select value={filterStatus} onChange={(e) => handleFilterChange(e.target.value)} className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"><option value="all">Tất cả</option><option value="pending">Chờ duyệt</option><option value="approved">Đã duyệt</option><option value="rejected">Từ chối</option></select></div><div className="flex items-center space-x-2"><span className="text-sm text-gray-600">Tổng cộng {filteredRequests.length} đơn</span></div></div>
-
-          {filteredRequests.length === 0 ? (
-            <div className="text-center py-12"><svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg><h3 className="mt-2 text-sm font-medium text-gray-900">Không có đơn chuyển phòng</h3><p className="mt-1 text-sm text-gray-500">Hiện tại chưa có đơn chuyển phòng nào.</p></div>
-          ) : (
-            <>
-              <div className="bg-white border border-gray-200 rounded-lg overflow-hidden"><div className="overflow-x-auto"><table className="min-w-full divide-y divide-gray-200"><thead className="bg-gray-50"><tr><th className="px-6 py-3 text-left"><input type="checkbox" checked={selectedRequests.length === currentRequests.length && currentRequests.length > 0} onChange={handleSelectAll} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" /></th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sinh viên</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Chuyển từ → đến</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lý do chuyển</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Chênh lệch phí</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Trạng thái</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Thao tác</th></tr></thead><tbody className="bg-white divide-y divide-gray-200">{currentRequests.map((request) => (<tr key={request.id} className="hover:bg-gray-50"><td className="px-6 py-4 whitespace-nowrap"><input type="checkbox" checked={selectedRequests.includes(request.id)} onChange={() => handleSelectRequest(request.id)} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500" /></td><td className="px-6 py-4 whitespace-nowrap"><div><div className="text-sm font-medium text-gray-900">{request.studentName}</div><div className="text-sm text-gray-500">{request.studentId}</div><div className="text-sm text-gray-500">{request.studentEmail}</div></div></td><td className="px-6 py-4 whitespace-nowrap"><div><div className="text-sm font-medium text-gray-900">{request.currentRoom.roomNumber} → {request.targetRoom.roomNumber}</div><div className="text-sm text-gray-500">{request.currentRoom.roomType} → {request.targetRoom.roomType}</div><div className="text-sm text-gray-500">{formatCurrency(request.currentRoom.monthlyFee)} → {formatCurrency(request.targetRoom.monthlyFee)}</div></div></td><td className="px-6 py-4 whitespace-nowrap"><div className="text-sm text-gray-900">{request.transfer.reason}</div><div className="text-sm text-gray-500">{getUrgencyBadge(request.transfer.urgency)}</div></td><td className="px-6 py-4 whitespace-nowrap"><div className={`text-sm font-medium ${request.contract.feeDifference > 0 ? 'text-red-600' : request.contract.feeDifference < 0 ? 'text-green-600' : 'text-gray-600'}`}>{request.contract.feeDifference > 0 ? '+' : ''}{formatCurrency(request.contract.feeDifference)}</div><div className="text-sm text-gray-500">{request.contract.feeDifference > 0 ? 'Thêm tiền' : request.contract.feeDifference < 0 ? 'Hoàn tiền' : 'Không đổi'}</div></td><td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(request.status)}</td><td className="px-6 py-4 whitespace-nowrap text-sm font-medium"><button onClick={() => handleViewDetail(request)} className="text-blue-600 hover:text-blue-900 mr-3">Chi tiết</button></td></tr>))}</tbody></table></div></div>
-              <div className="mt-6"><Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={handlePageChange} itemsPerPage={itemsPerPage} totalItems={filteredRequests.length} showInfo={true} /></div>
-            </>
-          )}
+    <PageLayout
+      title="Duyệt đơn chuyển phòng KTX"
+      subtitle="Quản lý và duyệt các đơn chuyển phòng ký túc xá"
+      showClose={true}
+      onClose={onCancel}
+    >
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="bg-blue-50 p-4 rounded-lg">
+          <div className="flex items-center">
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-blue-600">Tổng đơn</p>
+              <p className="text-2xl font-bold text-blue-900">{statistics.total}</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-yellow-50 p-4 rounded-lg">
+          <div className="flex items-center">
+            <div className="p-2 bg-yellow-100 rounded-lg">
+              <svg className="w-6 h-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-yellow-600">Chờ duyệt</p>
+              <p className="text-2xl font-bold text-yellow-900">{statistics.pending}</p>
+            </div>
+          </div>
+        </div>
+        <div className="bg-green-50 p-4 rounded-lg">
+          <div className="flex items-center">
+            <div className="p-2 bg-green-100 rounded-lg">
+              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <div className="ml-4">
+              <p className="text-sm font-medium text-green-600">Đã duyệt</p>
+              <p className="text-2xl font-bold text-green-900">{statistics.approved}</p>
+            </div>
+          </div>
         </div>
       </div>
 
-      {showDetailModal && selectedRequest && (<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"><div className="bg-white rounded-lg p-6 max-w-5xl w-full mx-4 max-h-[90vh] overflow-y-auto"><div className="flex items-center justify-between mb-6"><h2 className="text-xl font-bold text-gray-800">Chi tiết đơn chuyển phòng</h2><button onClick={() => setShowDetailModal(false)} className="text-gray-500 hover:text-gray-700"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button></div><div className="grid grid-cols-1 md:grid-cols-2 gap-6"><div className="bg-gray-50 p-4 rounded-lg"><h3 className="text-lg font-semibold text-gray-800 mb-4">Thông tin sinh viên</h3><div className="space-y-2"><div><span className="font-medium">Họ tên:</span> {selectedRequest.studentName}</div><div><span className="font-medium">Mã SV:</span> {selectedRequest.studentId}</div><div><span className="font-medium">Email:</span> {selectedRequest.studentEmail}</div><div><span className="font-medium">SĐT:</span> {selectedRequest.studentPhone}</div><div><span className="font-medium">MSSV:</span> {selectedRequest.studentIdNumber}</div></div></div><div className="bg-gray-50 p-4 rounded-lg"><h3 className="text-lg font-semibold text-gray-800 mb-4">Thông tin chuyển phòng</h3><div className="space-y-2"><div><span className="font-medium">Ngày yêu cầu:</span> {formatDate(selectedRequest.transfer.requestDate)}</div><div><span className="font-medium">Lý do:</span> {selectedRequest.transfer.reason}</div><div><span className="font-medium">Dự kiến chuyển:</span> {formatDate(selectedRequest.transfer.expectedTransferDate)}</div><div><span className="font-medium">Mức độ ưu tiên:</span> {getUrgencyBadge(selectedRequest.transfer.urgency)}</div><div><span className="font-medium">Ghi chú:</span> {selectedRequest.transfer.notes}</div></div></div><div className="bg-gray-50 p-4 rounded-lg"><h3 className="text-lg font-semibold text-gray-800 mb-4">Phòng hiện tại</h3><div className="space-y-2"><div><span className="font-medium">Phòng:</span> {selectedRequest.currentRoom.roomNumber}</div><div><span className="font-medium">Tòa:</span> {selectedRequest.currentRoom.building}</div><div><span className="font-medium">Khu:</span> {selectedRequest.currentRoom.zone}</div><div><span className="font-medium">Tầng:</span> {selectedRequest.currentRoom.floor}</div><div><span className="font-medium">Loại:</span> {selectedRequest.currentRoom.roomType}</div><div><span className="font-medium">Sức chứa:</span> {selectedRequest.currentRoom.capacity}</div><div><span className="font-medium">Đang ở:</span> {selectedRequest.currentRoom.currentOccupancy}</div><div><span className="font-medium">Phí/tháng:</span> {formatCurrency(selectedRequest.currentRoom.monthlyFee)}</div></div></div><div className="bg-gray-50 p-4 rounded-lg"><h3 className="text-lg font-semibold text-gray-800 mb-4">Phòng mong muốn</h3><div className="space-y-2"><div><span className="font-medium">Phòng:</span> {selectedRequest.targetRoom.roomNumber}</div><div><span className="font-medium">Tòa:</span> {selectedRequest.targetRoom.building}</div><div><span className="font-medium">Khu:</span> {selectedRequest.targetRoom.zone}</div><div><span className="font-medium">Tầng:</span> {selectedRequest.targetRoom.floor}</div><div><span className="font-medium">Loại:</span> {selectedRequest.targetRoom.roomType}</div><div><span className="font-medium">Sức chứa:</span> {selectedRequest.targetRoom.capacity}</div><div><span className="font-medium">Đang ở:</span> {selectedRequest.targetRoom.currentOccupancy}</div><div><span className="font-medium">Phí/tháng:</span> {formatCurrency(selectedRequest.targetRoom.monthlyFee)}</div></div></div><div className="bg-gray-50 p-4 rounded-lg"><h3 className="text-lg font-semibold text-gray-800 mb-4">Thông tin hợp đồng</h3><div className="space-y-2"><div><span className="font-medium">Mã HĐ:</span> {selectedRequest.contract.contractId}</div><div><span className="font-medium">Ngày bắt đầu:</span> {formatDate(selectedRequest.contract.startDate)}</div><div><span className="font-medium">Ngày kết thúc:</span> {formatDate(selectedRequest.contract.endDate)}</div><div><span className="font-medium">Tiền cọc:</span> {formatCurrency(selectedRequest.contract.deposit)}</div><div><span className="font-medium">Phí hiện tại:</span> {formatCurrency(selectedRequest.contract.currentMonthlyFee)}</div><div><span className="font-medium">Phí mới:</span> {formatCurrency(selectedRequest.contract.newMonthlyFee)}</div><div><span className="font-medium">Chênh lệch:</span> <span className={`${selectedRequest.contract.feeDifference > 0 ? 'text-red-600' : selectedRequest.contract.feeDifference < 0 ? 'text-green-600' : 'text-gray-600'}`}>{selectedRequest.contract.feeDifference > 0 ? '+' : ''}{formatCurrency(selectedRequest.contract.feeDifference)}</span></div><div><span className="font-medium">Đã thanh toán:</span> {formatCurrency(selectedRequest.contract.totalPaid)}</div><div><span className="font-medium">Còn lại:</span> {formatCurrency(selectedRequest.contract.remainingAmount)}</div></div></div><div className="bg-gray-50 p-4 rounded-lg"><h3 className="text-lg font-semibold text-gray-800 mb-4">Trạng thái tài liệu</h3><div className="grid grid-cols-2 gap-4">{Object.entries(selectedRequest.documents).map(([doc, status]) => (<div key={doc} className="flex items-center space-x-2"><div className={`w-3 h-3 rounded-full ${status ? 'bg-green-500' : 'bg-red-500'}`}></div><span className="text-sm">{doc}</span></div>))}</div></div>{selectedRequest.status !== 'pending' && (<div className="bg-gray-50 p-4 rounded-lg md:col-span-2"><h3 className="text-lg font-semibold text-gray-800 mb-4">Thông tin xử lý</h3><div className="space-y-2">{selectedRequest.status === 'approved' && (<><div><span className="font-medium">Ngày duyệt:</span> {formatDate(selectedRequest.approvedAt)}</div><div><span className="font-medium">Người duyệt:</span> {selectedRequest.approvedBy}</div></>)}{selectedRequest.status === 'rejected' && (<><div><span className="font-medium">Ngày từ chối:</span> {formatDate(selectedRequest.rejectedAt)}</div><div><span className="font-medium">Người từ chối:</span> {selectedRequest.rejectedBy}</div><div><span className="font-medium">Lý do từ chối:</span> {selectedRequest.rejectionReason}</div></>)}</div></div>)}
-            </div>
-            {selectedRequest.status === 'pending' && (<div className="flex items-center justify-end space-x-4 mt-6 pt-6 border-t"><Button onClick={() => { const rejectionReason = prompt('Nhập lý do từ chối:'); if (rejectionReason) { const updatedRequests = transferRequests.map(req => req.id === selectedRequest.id ? { ...req, status: 'rejected', rejectedAt: new Date().toISOString(), rejectedBy: user?.id || 'Admin001', rejectionReason } : req); setTransferRequests(updatedRequests); localStorage.setItem('roomTransferRequests', JSON.stringify(updatedRequests)); setShowDetailModal(false); alert('Đã từ chối đơn chuyển phòng!'); } }} variant="danger">Từ chối</Button><Button onClick={() => { const updatedRequests = transferRequests.map(req => req.id === selectedRequest.id ? { ...req, status: 'approved', approvedAt: new Date().toISOString(), approvedBy: user?.id || 'Admin001' } : req); setTransferRequests(updatedRequests); localStorage.setItem('roomTransferRequests', JSON.stringify(updatedRequests)); if (selectedRequest.contract.feeDifference !== 0) { const adjustmentBill = { id: `ADJUSTMENT_${selectedRequest.id}`, studentId: selectedRequest.studentId, studentName: selectedRequest.studentName, studentEmail: selectedRequest.studentEmail, type: selectedRequest.contract.feeDifference > 0 ? 'additional' : 'refund', amount: Math.abs(selectedRequest.contract.feeDifference), description: `Điều chỉnh phí chuyển phòng từ ${selectedRequest.currentRoom.roomNumber} sang ${selectedRequest.targetRoom.roomNumber}`, status: 'pending', createdAt: new Date().toISOString(), dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), transferRequestId: selectedRequest.id }; const existingBills = JSON.parse(localStorage.getItem('bills') || '[]'); existingBills.push(adjustmentBill); localStorage.setItem('bills', JSON.stringify(existingBills)); } setShowDetailModal(false); alert('Đã duyệt đơn chuyển phòng thành công!'); }} variant="success">Duyệt</Button></div>)}
-          </div></div>)}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 space-y-4 sm:space-y-0">
+        <div className="flex items-center space-x-4 flex-1">
+          <div className="w-32">
+            <Select
+              value={filterStatus}
+              onChange={handleFilterChange}
+            >
+              <option value="All">Tất cả</option>
+              <option value="Unapproved">Chờ duyệt</option>
+              <option value="Approved">Đã duyệt</option>
+            </Select>
+          </div>
+          <div className="flex-1">
+            <Input
+              variant="search"
+              placeholder="Tìm kiếm theo tên, MSSV, số phòng..."
+              value={searchKeyword}
+              onChange={handleSearchChange}
+              onClear={handleClearSearch}
+              size="medium"
+            />
+          </div>
+        </div>
+      </div>
 
-      <RejectionModal isOpen={showRejectionModal} onClose={() => setShowRejectionModal(false)} onConfirm={handleConfirmRejection} title="Nhập lý do từ chối đơn chuyển phòng" />
-    </div>
+      {selectedRequests.length > 0 && (
+        <div className="flex items-center space-x-4 mb-6 p-4 bg-blue-50 rounded-lg">
+          <span className="text-blue-800 font-medium">Đã chọn {selectedRequests.length} đơn</span>
+          <Button
+            onClick={handleApproveRequests}
+            variant="success"
+            loading={approveLoading}
+            loadingText="Đang duyệt..."
+          >
+            Duyệt đã chọn
+          </Button>
+          <Button
+            onClick={handleRejectRequests}
+            variant="danger"
+            loading={rejectLoading}
+            loadingText="Đang từ chối..."
+          >
+            Từ chối đã chọn
+          </Button>
+        </div>
+      )}
+
+      <LoadingState
+        isLoading={loading}
+        isEmpty={!loading && transferRequests.length === 0}
+        emptyState={
+          <div className="text-center py-12 text-gray-500">
+            <p>Không có đơn chuyển phòng nào.</p>
+          </div>
+        }
+      >
+        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left">
+                    <input
+                      type="checkbox"
+                      checked={
+                        currentRequests.filter(req => req.status !== 'approved').length > 0 &&
+                        currentRequests
+                          .filter(req => req.status !== 'approved')
+                          .every(req => selectedRequests.includes(req.id))
+                      }
+                      onChange={handleSelectAll}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      disabled={currentRequests.filter(req => req.status !== 'approved').length === 0}
+                    />
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Sinh viên
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Chuyển từ → đến
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Chênh lệch phí
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Trạng thái
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Thao tác
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {currentRequests.map((request) => (
+                  <tr key={request.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={selectedRequests.includes(request.id)}
+                        onChange={() => handleSelectRequest(request.id)}
+                        disabled={request.status === 'approved'}
+                        className={`rounded border-gray-300 text-blue-600 focus:ring-blue-500 ${
+                          request.status === 'approved' ? 'opacity-50 cursor-not-allowed' : ''
+                        }`}
+                      />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">{request.studentName}</div>
+                        <div className="text-sm text-gray-500">{request.mssv || request.studentIdNumber}</div>
+                        {request.studentEmail && (
+                          <div className="text-sm text-gray-500">{request.studentEmail}</div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">
+                          {request.currentRoom.roomNumber} → {request.targetRoom.roomNumber}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          Vị trí {request.slotNumber} → Vị trí {request.newSlotNumber}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {formatCurrency(request.currentRoom.monthlyFee)} → {formatCurrency(request.targetRoom.monthlyFee)}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className={`text-sm font-medium ${
+                        request.contract.feeDifference > 0 ? 'text-red-600' : 
+                        request.contract.feeDifference < 0 ? 'text-green-600' : 'text-gray-600'
+                      }`}>
+                        {request.contract.feeDifference > 0 ? '+' : ''}{formatCurrency(request.contract.feeDifference)}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {request.contract.feeDifference > 0 ? 'Thêm tiền' : 
+                         request.contract.feeDifference < 0 ? 'Hoàn tiền' : 'Không đổi'}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {getStatusBadge(request.status)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <Button
+                        variant="link"
+                        onClick={() => handleViewDetail(request)}
+                        size="small"
+                      >
+                        Chi tiết
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {totalPages > 1 && (
+          <div className="mt-8">
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={handlePageChange}
+              itemsPerPage={itemsPerPage}
+              totalItems={totalItems}
+              showInfo={true}
+            />
+          </div>
+        )}
+      </LoadingState>
+
+      <BaseModal
+        isOpen={showDetailModal}
+        onClose={() => setShowDetailModal(false)}
+        title="Chi tiết đơn chuyển phòng"
+        size="xlarge"
+        closeOnOverlayClick={true}
+        className="max-h-[105vh] overflow-y-auto"
+        zIndex={60}
+      >
+        <ModalBody className="max-h-[calc(105vh-200px)] overflow-y-auto">
+          {selectedRequestDetail && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">Thông tin sinh viên</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Họ tên</label>
+                    <p className="text-gray-900">{selectedRequestDetail.studentName}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">MSSV</label>
+                    <p className="text-gray-900">{selectedRequestDetail.mssv || selectedRequestDetail.studentIdNumber}</p>
+                  </div>
+                  {selectedRequestDetail.dob && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Ngày sinh</label>
+                      <p className="text-gray-900">{formatDate(selectedRequestDetail.dob)}</p>
+                    </div>
+                  )}
+                  {selectedRequestDetail.gender && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Giới tính</label>
+                      <p className="text-gray-900">{selectedRequestDetail.gender === 'male' ? 'Nam' : 'Nữ'}</p>
+                    </div>
+                  )}
+                  {selectedRequestDetail.address && (
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700">Địa chỉ</label>
+                      <p className="text-gray-900">{selectedRequestDetail.address}</p>
+                    </div>
+                  )}
+                  {selectedRequestDetail.school && (
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700">Trường</label>
+                      <p className="text-gray-900">{selectedRequestDetail.school}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">Thông tin chuyển phòng</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Phòng hiện tại</label>
+                    <p className="text-gray-900">{selectedRequestDetail.currentRoom.roomNumber}</p>
+                    <p className="text-sm text-gray-500">Vị trí {selectedRequestDetail.slotNumber}</p>
+                    <p className="text-sm text-gray-500">Phí: {formatCurrency(selectedRequestDetail.currentRoom.monthlyFee)}/tháng</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Phòng mới</label>
+                    <p className="text-gray-900">{selectedRequestDetail.targetRoom.roomNumber}</p>
+                    <p className="text-sm text-gray-500">Vị trí {selectedRequestDetail.newSlotNumber}</p>
+                    <p className="text-sm text-gray-500">Phí: {formatCurrency(selectedRequestDetail.targetRoom.monthlyFee)}/tháng</p>
+                  </div>
+                  {selectedRequestDetail.contract.feeDifference !== 0 && (
+                    <div className="col-span-2">
+                      <label className="block text-sm font-medium text-gray-700">Chênh lệch phí</label>
+                      <p className={`text-lg font-semibold ${
+                        selectedRequestDetail.contract.feeDifference > 0 ? 'text-red-600' : 'text-green-600'
+                      }`}>
+                        {selectedRequestDetail.contract.feeDifference > 0 ? '+' : ''}
+                        {formatCurrency(selectedRequestDetail.contract.feeDifference)}
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        {selectedRequestDetail.contract.feeDifference > 0 ? 'Sinh viên cần thanh toán thêm' : 'Sinh viên được hoàn tiền'}
+                      </p>
+                    </div>
+                  )}
+                  {selectedRequestDetail.newDuration && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Thời hạn thuê mới</label>
+                      <p className="text-gray-900">{selectedRequestDetail.newDuration} tháng</p>
+                    </div>
+                  )}
+                  {selectedRequestDetail.transfer.expectedTransferDate && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Dự kiến chuyển</label>
+                      <p className="text-gray-900">{formatDate(selectedRequestDetail.transfer.expectedTransferDate)}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <div className="flex justify-end pt-4 border-t border-gray-200">
+                <Button onClick={() => setShowDetailModal(false)} variant="outline">
+                  Đóng
+                </Button>
+              </div>
+            </div>
+          )}
+        </ModalBody>
+      </BaseModal>
+
+      <RejectionModal
+        isOpen={showRejectionModal}
+        onClose={() => setShowRejectionModal(false)}
+        onConfirm={handleConfirmRejection}
+        title="Nhập lý do từ chối đơn chuyển phòng"
+        selectedItems={currentRequests.filter(req => selectedRequests.includes(req.id))}
+        onViewDetail={(item) => {
+          // Không đóng modal từ chối, chỉ mở modal chi tiết
+          handleViewDetail(item);
+        }}
+        onRemoveItem={(itemId) => {
+          // Bỏ đơn khỏi danh sách đã chọn
+          setSelectedRequests(prev => {
+            const newSelection = prev.filter(id => id !== itemId);
+            // Nếu không còn đơn nào, đóng modal từ chối
+            if (newSelection.length === 0) {
+              setShowRejectionModal(false);
+            }
+            return newSelection;
+          });
+        }}
+      />
+    </PageLayout>
   );
 };
 

@@ -1,63 +1,59 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNotification } from '../../contexts/NotificationContext';
 import Button from '../../components/ui/Button';
+import LoadingState from '../../components/ui/LoadingState';
+import InfoBox from '../../components/ui/InfoBox';
+import roomRegistrationApi from '../../api/roomRegistrationApi';
+import roomApi from '../../api/roomApi';
 
 const RoomExtension = ({ onSuccess, onCancel }) => {
-  const [contractInfo, setContractInfo] = useState(null);
+  const { user } = useAuth();
+  const { showSuccess, showError } = useNotification();
+  const [roomData, setRoomData] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [selectedExtension, setSelectedExtension] = useState('');
   const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isExtending, setIsExtending] = useState(false);
-  const { user } = useAuth();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Extension options
   const extensionOptions = [
-    { value: '1-semester', label: '1 học kỳ', duration: 6, price: 9000000 },
-    { value: '1-year', label: '1 năm', duration: 12, price: 18000000 },
-    { value: '2-years', label: '2 năm', duration: 24, price: 36000000 },
-    { value: 'until-graduation', label: 'Đến khi tốt nghiệp', duration: 36, price: 54000000 }
+    { value: '1-semester', label: '1 học kỳ', duration: 6 },
+    { value: '1-year', label: '1 năm', duration: 12 },
+    { value: '2-years', label: '2 năm', duration: 24 },
+    { value: '3-years', label: '3 năm', duration: 36 }
   ];
 
-  // Mock contract data
-  const mockContractData = {
-    contractId: 'CT2024001',
-    studentId: user?.username || 'student001',
-    studentName: user?.name || 'Nguyễn Văn A',
-    roomNumber: 'A101',
-    roomType: 'Phòng đôi',
-    startDate: '2024-01-15',
-    endDate: '2024-07-15',
-    duration: 6, // months
-    monthlyFee: 1500000,
-    totalPaid: 9000000,
-    status: 'active',
-    remainingDays: 45,
-    extensionHistory: [
-      {
-        id: 1,
-        extensionDate: '2024-01-15',
-        duration: 6,
-        amount: 9000000,
-        status: 'completed'
-      }
-    ]
-  };
-
+  // Fetch room data
   useEffect(() => {
-    // Load contract information
-    const savedContract = localStorage.getItem('roomContract');
-    if (savedContract) {
+    const fetchRoomData = async () => {
       try {
-        const parsedContract = JSON.parse(savedContract);
-        setContractInfo(parsedContract);
-      } catch (error) {
-        console.error('Error parsing contract data:', error);
-        setContractInfo(mockContractData);
+        setLoading(true);
+        const response = await roomApi.getRoomByUser();
+        if (response.success && response.data) {
+          setRoomData(response.data);
+        }
+      } catch (err) {
+        console.error('Error fetching room data:', err);
+        // Chỉ hiển thị lỗi nếu không phải lỗi "không tìm thấy phòng" (404 hoặc RoomRegistrationNotFound)
+        const errorCode = err?.response?.data?.errorCode;
+        const statusCode = err?.response?.status;
+        const isNotFoundError = statusCode === 404 || errorCode === 'ROOM_REGISTRATION_NOT_FOUND';
+        
+        if (!isNotFoundError) {
+          const errorMessage = err?.response?.data?.message || 'Có lỗi xảy ra khi tải thông tin phòng.';
+          showError(errorMessage);
+        }
+        // Nếu là lỗi "không tìm thấy phòng", chỉ set roomData = null, không hiển thị notification
+        setRoomData(null);
+      } finally {
+        setLoading(false);
       }
-    } else {
-      setContractInfo(mockContractData);
-    }
-  }, [user]);
+    };
+
+    fetchRoomData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Chỉ gọi một lần khi component mount
 
   const handleExtensionSelect = (value) => {
     setSelectedExtension(value);
@@ -72,114 +68,67 @@ const RoomExtension = ({ onSuccess, onCancel }) => {
       return;
     }
 
-    if (!contractInfo) {
-      setError('Thông tin sinh viên không hợp lệ. Vui lòng nhập lại');
+    if (!roomData) {
+      setError('Không tìm thấy thông tin phòng.');
       return;
     }
 
-    setIsExtending(true);
-    setIsLoading(true);
+    setIsSubmitting(true);
     setError('');
 
-    // Simulate API call delay
-    setTimeout(() => {
-      try {
-        const selectedOption = extensionOptions.find(opt => opt.value === selectedExtension);
-        
-        // Calculate new end date
-        const currentEndDate = new Date(contractInfo.endDate);
+    try {
+      const selectedOption = extensionOptions.find(opt => opt.value === selectedExtension);
+      
+      // Gọi API để yêu cầu gia hạn
+      const response = await roomRegistrationApi.requestRoomExtend({
+        duration: selectedOption.duration
+      });
+
+      if (response.success) {
+        // Calculate new end date để hiển thị
+        const currentEndDate = new Date(roomData.endDate);
         const newEndDate = new Date(currentEndDate);
         newEndDate.setMonth(newEndDate.getMonth() + selectedOption.duration);
 
-        // Update contract information
-        const updatedContract = {
-          ...contractInfo,
-          endDate: newEndDate.toISOString().split('T')[0],
-          duration: contractInfo.duration + selectedOption.duration,
-          totalPaid: contractInfo.totalPaid + selectedOption.price,
-          remainingDays: contractInfo.remainingDays + (selectedOption.duration * 30),
-          extensionHistory: [
-            ...contractInfo.extensionHistory,
-            {
-              id: contractInfo.extensionHistory.length + 1,
-              extensionDate: new Date().toISOString().split('T')[0],
-              duration: selectedOption.duration,
-              amount: selectedOption.price,
-              status: 'completed'
-            }
-          ]
-        };
-
-        // Save updated contract
-        localStorage.setItem('roomContract', JSON.stringify(updatedContract));
-        
-        // Create extension request with synchronized data for admin approval
-        const extensionRequest = {
-          id: Date.now(),
-          studentId: user.username,
-          studentName: user.name,
-          studentEmail: user.email,
-          studentPhone: user.phone || 'Chưa cập nhật',
-          currentRoom: contractInfo.roomNumber,
-          currentBuilding: contractInfo.roomNumber.includes('A') ? 'Tòa A' : contractInfo.roomNumber.includes('B') ? 'Tòa B' : 'Tòa C',
-          currentZone: contractInfo.roomNumber.includes('A') ? 'Khu A' : contractInfo.roomNumber.includes('B') ? 'Khu B' : 'Khu C',
-          roomType: contractInfo.roomType,
-          currentContractEndDate: contractInfo.endDate,
-          currentContractId: contractInfo.contractId,
-          extensionDuration: selectedOption.duration,
-          extensionType: selectedExtension,
-          extensionLabel: selectedOption.label,
-          newEndDate: newEndDate.toISOString().split('T')[0],
-          reason: 'Gia hạn hợp đồng ở KTX',
-          requestDate: new Date().toISOString(),
-          status: 'pending',
-          documents: [
-            { name: 'Giấy xác nhận sinh viên', uploaded: true },
-            { name: 'CMND/CCCD', uploaded: true },
-            { name: 'Giấy tờ khác', uploaded: false }
-          ],
-          monthlyFee: contractInfo.monthlyFee,
-          estimatedFee: selectedOption.price,
-          priority: 'normal'
-        };
-
-        // Save extension request to localStorage for admin approval
-        const existingRequests = JSON.parse(localStorage.getItem('extensionRequests') || '[]');
-        existingRequests.push(extensionRequest);
-        localStorage.setItem('extensionRequests', JSON.stringify(existingRequests));
-        
-        // Simulate sending email notification
-        console.log(`Extension email sent to ${user?.email || 'student@example.com'}`);
-        
-        setIsLoading(false);
-        setIsExtending(false);
-        
-        // Show success message
-        alert(`Đơn gia hạn đã được gửi thành công!\nThời gian gia hạn: ${selectedOption.label}\nNgày hết hạn mới: ${newEndDate.toLocaleDateString('vi-VN')}\nĐơn của bạn sẽ được xem xét trong vòng 24-48 giờ.\nEmail xác nhận đã được gửi đến ${user?.email || 'email của bạn'}`);
+        showSuccess(`Đơn yêu cầu gia hạn đã được gửi thành công! Thời gian gia hạn: ${selectedOption.label}. Ngày hết hạn mới dự kiến: ${formatDate(newEndDate.toISOString())}. Đơn của bạn sẽ được xem xét trong vòng 24-48 giờ.`);
         
         if (onSuccess) {
-          onSuccess(updatedContract);
+          onSuccess();
         }
-      } catch (err) {
-        setError('Gia hạn không thành công vui lòng kiểm tra lại');
-        setIsLoading(false);
-        setIsExtending(false);
       }
-    }, 2000);
+    } catch (err) {
+      console.error('Error submitting extension request:', err);
+      const errorMessage = err?.response?.data?.message || 'Có lỗi xảy ra khi gửi đơn yêu cầu gia hạn. Vui lòng thử lại.';
+      setError(errorMessage);
+      showError(errorMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const formatPrice = (price) => {
+    if (!price) return '-';
+    const numAmount = parseFloat(price) * 1000;
     return new Intl.NumberFormat('vi-VN', {
       style: 'currency',
-      currency: 'VND'
-    }).format(price);
+      currency: 'VND',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(numAmount);
   };
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('vi-VN');
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('vi-VN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
   };
 
   const calculateDaysRemaining = (endDate) => {
+    if (!endDate) return 0;
     const today = new Date();
     const end = new Date(endDate);
     const diffTime = end - today;
@@ -187,16 +136,40 @@ const RoomExtension = ({ onSuccess, onCancel }) => {
     return diffDays > 0 ? diffDays : 0;
   };
 
-  if (!contractInfo) {
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Đang tải thông tin hợp đồng...</p>
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <LoadingState isLoading={true} loadingText="Đang tải thông tin hợp đồng..." className="py-12" />
+          </div>
         </div>
       </div>
     );
   }
+
+  if (!roomData) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <InfoBox 
+              type="info" 
+              messages={['Bạn chưa có thông tin phòng ở để gia hạn.']} 
+            />
+            <div className="mt-4">
+              <Button variant="outline" onClick={onCancel}>
+                Quay lại
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const remainingDays = calculateDaysRemaining(roomData.endDate);
+  const monthlyFee = roomData.monthlyFee || 0;
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -215,34 +188,34 @@ const RoomExtension = ({ onSuccess, onCancel }) => {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Mã hợp đồng</label>
-                  <p className="text-lg font-semibold text-gray-900">{contractInfo.contractId}</p>
+                  <label className="text-sm font-medium text-gray-500">Số phòng</label>
+                  <p className="text-lg font-semibold text-gray-900">{roomData.roomNumber}</p>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Phòng</label>
-                  <p className="text-lg font-semibold text-gray-900">{contractInfo.roomNumber}</p>
+                  <label className="text-sm font-medium text-gray-500">Số giường</label>
+                  <p className="text-lg font-semibold text-gray-900">Giường {roomData.mySlotNumber}</p>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium text-gray-500">Loại phòng</label>
-                  <p className="text-lg font-semibold text-gray-900">{contractInfo.roomType}</p>
+                  <p className="text-lg font-semibold text-gray-900">{roomData.roomType?.type || 'N/A'}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-500">Phí hàng tháng</label>
-                  <p className="text-lg font-semibold text-gray-900">{formatPrice(contractInfo.monthlyFee)}</p>
+                  <p className="text-lg font-semibold text-gray-900">{formatPrice(monthlyFee)}</p>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-gray-500">Ngày bắt đầu</label>
-                  <p className="text-lg font-semibold text-gray-900">{formatDate(contractInfo.startDate)}</p>
+                  <label className="text-sm font-medium text-gray-500">Ngày đăng ký</label>
+                  <p className="text-lg font-semibold text-gray-900">{formatDate(roomData.registerDate)}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-500">Ngày kết thúc</label>
-                  <p className="text-lg font-semibold text-gray-900">{formatDate(contractInfo.endDate)}</p>
+                  <p className="text-lg font-semibold text-gray-900">{formatDate(roomData.endDate)}</p>
                 </div>
               </div>
 
@@ -250,25 +223,20 @@ const RoomExtension = ({ onSuccess, onCancel }) => {
                 <div>
                   <label className="text-sm font-medium text-gray-500">Thời gian còn lại</label>
                   <p className={`text-lg font-semibold ${
-                    contractInfo.remainingDays > 30 ? 'text-green-600' : 
-                    contractInfo.remainingDays > 7 ? 'text-yellow-600' : 'text-red-600'
+                    remainingDays > 30 ? 'text-green-600' : 
+                    remainingDays > 7 ? 'text-yellow-600' : 'text-red-600'
                   }`}>
-                    {contractInfo.remainingDays} ngày
+                    {remainingDays} ngày
                   </p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-500">Trạng thái</label>
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    contractInfo.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    remainingDays > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                   }`}>
-                    {contractInfo.status === 'active' ? 'Đang hoạt động' : 'Hết hạn'}
+                    {remainingDays > 0 ? 'Đang hoạt động' : 'Hết hạn'}
                   </span>
                 </div>
-              </div>
-
-              <div className="border-t pt-4">
-                <label className="text-sm font-medium text-gray-500">Tổng đã thanh toán</label>
-                <p className="text-2xl font-bold text-green-600">{formatPrice(contractInfo.totalPaid)}</p>
               </div>
             </div>
           </div>
@@ -283,51 +251,53 @@ const RoomExtension = ({ onSuccess, onCancel }) => {
                   Thời gian gia hạn
                 </label>
                 <div className="space-y-3">
-                  {extensionOptions.map((option) => (
-                    <div
-                      key={option.value}
-                      className={`border rounded-lg p-4 cursor-pointer transition-all ${
-                        selectedExtension === option.value
-                          ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
-                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                      }`}
-                      onClick={() => handleExtensionSelect(option.value)}
-                    >
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <h3 className="font-semibold text-gray-900">{option.label}</h3>
-                          <p className="text-sm text-gray-600">{option.duration} tháng</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-bold text-green-600">{formatPrice(option.price)}</p>
-                          <p className="text-xs text-gray-500">
-                            {formatPrice(option.price / option.duration)}/tháng
-                          </p>
+                  {extensionOptions.map((option) => {
+                    const estimatedPrice = monthlyFee * option.duration;
+                    return (
+                      <div
+                        key={option.value}
+                        className={`border rounded-lg p-4 cursor-pointer transition-all ${
+                          selectedExtension === option.value
+                            ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-200'
+                            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                        }`}
+                        onClick={() => handleExtensionSelect(option.value)}
+                      >
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <h3 className="font-semibold text-gray-900">{option.label}</h3>
+                            <p className="text-sm text-gray-600">{option.duration} tháng</p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-bold text-green-600">{formatPrice(estimatedPrice)}</p>
+                            <p className="text-xs text-gray-500">
+                              {formatPrice(monthlyFee)}/tháng
+                            </p>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
-              {selectedExtension && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h4 className="font-semibold text-blue-900 mb-2">Thông tin gia hạn</h4>
-                  {(() => {
-                    const selectedOption = extensionOptions.find(opt => opt.value === selectedExtension);
-                    const newEndDate = new Date(contractInfo.endDate);
-                    newEndDate.setMonth(newEndDate.getMonth() + selectedOption.duration);
-                    
-                    return (
-                      <div className="text-sm text-blue-800 space-y-1">
-                        <p>• Thời gian gia hạn: {selectedOption.label}</p>
-                        <p>• Ngày hết hạn mới: {formatDate(newEndDate.toISOString())}</p>
-                        <p>• Số tiền cần thanh toán: <span className="font-bold">{formatPrice(selectedOption.price)}</span></p>
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
+              {selectedExtension && (() => {
+                const selectedOption = extensionOptions.find(opt => opt.value === selectedExtension);
+                const newEndDate = new Date(roomData.endDate);
+                newEndDate.setMonth(newEndDate.getMonth() + selectedOption.duration);
+                const estimatedPrice = monthlyFee * selectedOption.duration;
+                
+                return (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h4 className="font-semibold text-blue-900 mb-2">Thông tin gia hạn</h4>
+                    <div className="text-sm text-blue-800 space-y-1">
+                      <p>• Thời gian gia hạn: {selectedOption.label}</p>
+                      <p>• Ngày hết hạn mới: {formatDate(newEndDate.toISOString())}</p>
+                      <p>• Số tiền dự kiến: <span className="font-bold">{formatPrice(estimatedPrice)}</span></p>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {error && (
                 <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md text-sm">
@@ -339,14 +309,15 @@ const RoomExtension = ({ onSuccess, onCancel }) => {
                 <Button
                   variant="outline"
                   onClick={onCancel}
+                  disabled={isSubmitting}
                 >
                   Hủy
                 </Button>
                 <Button
                   variant="success"
-                  onClick={handleExtensionSubmit}
-                  loading={isLoading}
-                  loadingText="Đang gia hạn..."
+                  type="submit"
+                  loading={isSubmitting}
+                  loadingText="Đang gửi đơn..."
                   disabled={!selectedExtension}
                 >
                   Xác nhận gia hạn
@@ -356,51 +327,18 @@ const RoomExtension = ({ onSuccess, onCancel }) => {
           </div>
         </div>
 
-        {/* Extension History */}
-        <div className="mt-8 bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Lịch sử gia hạn</h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Ngày gia hạn
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Thời gian
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Số tiền
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Trạng thái
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {contractInfo.extensionHistory.map((extension) => (
-                  <tr key={extension.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {formatDate(extension.extensionDate)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {extension.duration} tháng
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {formatPrice(extension.amount)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        extension.status === 'completed' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {extension.status === 'completed' ? 'Hoàn thành' : 'Đang xử lý'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        {/* Extension Info */}
+        <div className="mt-8">
+          <InfoBox
+            type="info"
+            title="Thông tin gia hạn"
+            messages={[
+              'Đơn yêu cầu gia hạn cần được gửi trước khi hợp đồng hết hạn',
+              'Đơn yêu cầu sẽ được xem xét và phê duyệt bởi quản lý KTX trong vòng 24-48 giờ',
+              'Sau khi được phê duyệt, bạn sẽ nhận được email xác nhận',
+              'Phí gia hạn sẽ được tính dựa trên phí thuê hàng tháng và thời gian gia hạn'
+            ]}
+          />
         </div>
       </div>
     </div>
