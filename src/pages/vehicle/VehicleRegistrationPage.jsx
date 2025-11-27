@@ -282,7 +282,7 @@ const VehicleRegistrationPage = ({ onSuccess, onCancel }) => {
             type="text"
             value={formData.licensePlate}
             onChange={handleInputChange}
-            placeholder="VD: 30A-12345, AB-123456"
+            placeholder="VD: 12A-12345, 12-AB12345, 12-AB1234"
             required
             helperText="Biển số xe chỉ được chứa chữ cái, số, khoảng trắng, dấu gạch ngang hoặc dấu chấm (6-15 ký tự)"
           />

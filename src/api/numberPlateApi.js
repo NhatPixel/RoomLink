@@ -38,6 +38,14 @@ const numberPlateApi = {
     
     return axiosClient.delete('/number-plate/reject', { data: requestData });
   },
+
+  recognizeNumberPlate: (formData) => {
+    return axiosClient.post('/number-plate/recognize', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
 };
 
 export default numberPlateApi;

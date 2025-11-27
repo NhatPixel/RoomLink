@@ -48,6 +48,14 @@ const authApi = {
       withCredentials: true
     });
   },
+
+  loginFace(data) {
+    return axiosClient.post("/auth/login-face", data, {
+      headers: {
+        "Content-Type": "multipart/form-data"
+      }
+    });
+  },
 };
 
 export default authApi;

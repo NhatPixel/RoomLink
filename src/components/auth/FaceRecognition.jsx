@@ -1,51 +1,26 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { hasFace } from '../../services/faceDetectionService';
+import { authApi, userApi } from '../../api';
+import { setTokenGetter } from '../../api/axiosClient';
+import { useAuth } from '../../contexts/AuthContext';
+import { useNotification } from '../../contexts/NotificationContext';
 import AuthLayout from '../layout/AuthLayout';
 import Button from '../ui/Button';
 import InfoBox from '../ui/InfoBox';
 
 const FaceRecognition = ({ onSuccess, onCancel }) => {
+  const { login: authLogin } = useAuth();
+  const { showSuccess, showError } = useNotification();
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const scanIntervalRef = useRef(null);
   const streamRef = useRef(null);
+  const isApiCallingRef = useRef(false);
   const [isScanning, setIsScanning] = useState(false);
   const [hasFaceDetected, setHasFaceDetected] = useState(false);
   const [error, setError] = useState('');
   const [status, setStatus] = useState('Chuẩn bị quét khuôn mặt...');
 
-  // Dữ liệu mẫu khuôn mặt đã đăng ký
-  const registeredFaces = [
-    {
-      id: 1,
-      userId: 1,
-      username: 'admin',
-      name: 'Quản trị viên',
-      role: 'admin',
-      faceData: 'admin_face_data', // Mô phỏng dữ liệu khuôn mặt
-      email: 'admin@roomlink.com'
-    },
-    {
-      id: 2,
-      userId: 2,
-      username: 'student001',
-      name: 'Nguyễn Văn A',
-      role: 'student',
-      faceData: 'student001_face_data',
-      email: 'student001@roomlink.com',
-      studentId: '22110390'
-    },
-    {
-      id: 3,
-      userId: 3,
-      username: 'student002',
-      name: 'Trần Thị B',
-      role: 'student',
-      faceData: 'student002_face_data',
-      email: 'student002@roomlink.com',
-      studentId: '22110335'
-    }
-  ];
 
   useEffect(() => {
     startCamera();
@@ -141,6 +116,64 @@ const FaceRecognition = ({ onSuccess, onCancel }) => {
     });
   };
 
+  const callFaceLoginAPI = async (blob) => {
+    if (isApiCallingRef.current) {
+      return;
+    }
+
+    try {
+      isApiCallingRef.current = true;
+      setStatus('Đang xác thực khuôn mặt...');
+
+      const formData = new FormData();
+      formData.append('face', blob, 'face.jpg');
+
+      const response = await authApi.loginFace(formData);
+      const access_token = response.data.access_token;
+      const userId = response.data.userId;
+
+      if (!access_token) {
+        throw new Error('Không nhận được token từ server');
+      }
+
+      localStorage.setItem('token', access_token);
+      setTokenGetter(() => localStorage.getItem('token'));
+
+      const userResponse = await userApi.getUser();
+      const userData = userResponse.data;
+
+      const tokenPayload = JSON.parse(atob(access_token.split('.')[1]));
+      const roleId = tokenPayload.roleId;
+
+      const user = {
+        ...userData,
+        id: userId || userData.id,
+        roleId: roleId
+      };
+
+      authLogin(user, access_token);
+      showSuccess('Đăng nhập thành công!');
+
+      setTimeout(() => {
+        if (user.status === 'APPROVED_NOT_CHANGED') {
+          window.location.href = '/change-password';
+        } else {
+          if (user.role === 'admin') {
+            window.location.href = '/admin';
+          } else {
+            window.location.href = '/student';
+          }
+        }
+      }, 1000);
+    } catch (err) {
+      console.error('Face login error:', err);
+      const errorMessage = err.response?.data?.message || err.message || 'Không thể xác thực khuôn mặt';
+      showError(errorMessage);
+      setStatus('Xác thực thất bại. Vui lòng thử lại.');
+      isApiCallingRef.current = false;
+    }
+  };
+
   const startContinuousScan = () => {
     if (scanIntervalRef.current) {
       clearInterval(scanIntervalRef.current);
@@ -151,6 +184,10 @@ const FaceRecognition = ({ onSuccess, onCancel }) => {
 
     scanIntervalRef.current = setInterval(async () => {
       try {
+        if (isApiCallingRef.current) {
+          return;
+        }
+
         if (!videoRef.current || videoRef.current.readyState !== videoRef.current.HAVE_ENOUGH_DATA) {
           return;
         }
@@ -168,6 +205,7 @@ const FaceRecognition = ({ onSuccess, onCancel }) => {
 
         if (faceDetected) {
           setStatus('✓ Đã phát hiện khuôn mặt');
+          await callFaceLoginAPI(blob);
         } else {
           setStatus('Chưa phát hiện khuôn mặt. Vui lòng đưa khuôn mặt vào khung hình.');
         }
@@ -175,46 +213,11 @@ const FaceRecognition = ({ onSuccess, onCancel }) => {
         console.error('Error scanning face:', err);
         setHasFaceDetected(false);
         setStatus('Lỗi khi quét khuôn mặt. Vui lòng thử lại.');
+        isApiCallingRef.current = false;
       }
-    }, 1000);
+    }, 500);
   };
 
-  const handleLogin = async () => {
-    if (!hasFaceDetected) {
-      setError('Vui lòng đưa khuôn mặt vào khung hình trước khi đăng nhập');
-      return;
-    }
-
-    try {
-      setStatus('Đang xác thực...');
-      
-      const blob = await captureFaceAsBlob();
-      if (!blob) {
-        throw new Error('Không thể chụp ảnh khuôn mặt');
-      }
-
-      const matchedFace = registeredFaces[Math.floor(Math.random() * registeredFaces.length)];
-      
-      setStatus('Xác thực thành công!');
-      
-      localStorage.setItem('user', JSON.stringify(matchedFace));
-      localStorage.setItem('isLoggedIn', 'true');
-      
-      setTimeout(() => {
-        onSuccess({
-          id: matchedFace.userId,
-          username: matchedFace.username,
-          name: matchedFace.name,
-          role: matchedFace.role,
-          email: matchedFace.email,
-          studentId: matchedFace.studentId
-        });
-      }, 500);
-    } catch (err) {
-      setError('Lỗi trong quá trình xác thực: ' + err.message);
-      setStatus('Lỗi xác thực');
-    }
-  };
 
   const handleCancel = () => {
     // Stop camera immediately before redirect
@@ -280,15 +283,6 @@ const FaceRecognition = ({ onSuccess, onCancel }) => {
           )}
 
           <div className="space-y-3">
-            <Button
-              onClick={handleLogin}
-              disabled={!hasFaceDetected || error.includes('camera')}
-              variant="primary"
-              fullWidth
-            >
-              Đăng nhập
-            </Button>
-
             <Button
               onClick={handleCancel}
               variant="outline"

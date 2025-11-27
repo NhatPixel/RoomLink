@@ -55,7 +55,7 @@ export async function detectFace(imageSource, threshold = 0.8) {
 
 export async function hasFace(imageSource) {
   try {
-    const faces = await detectFace(imageSource, 0.6);
+    const faces = await detectFace(imageSource, 0.4);
     return faces.length > 0;
   } catch (error) {
     console.error('Error checking face:', error);

@@ -51,6 +51,10 @@ const AdminPage = () => {
     window.location.href = '/room-transfer-approval';
   };
 
+  const handlePlateDetection = () => {
+    window.location.href = '/plate-detection';
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="w-full px-4 py-8">
@@ -83,6 +87,10 @@ const AdminPage = () => {
               <div className="bg-blue-50 p-6 rounded-lg cursor-pointer hover:bg-blue-100 transition-colors" onClick={handleVehicleRegistrationApproval}>
                 <h3 className="text-lg font-semibold text-blue-800 mb-2">Duyệt đăng ký xe</h3>
                 <p className="text-blue-600 text-sm">Xem và duyệt các đơn đăng ký biển số xe</p>
+              </div>
+              <div className="bg-blue-50 p-6 rounded-lg cursor-pointer hover:bg-blue-100 transition-colors" onClick={handlePlateDetection}>
+                <h3 className="text-lg font-semibold text-blue-800 mb-2">Nhận diện biển số xe</h3>
+                <p className="text-blue-600 text-sm">Sử dụng camera để nhận diện biển số xe tự động</p>
               </div>
             </div>
           </div>

@@ -20,6 +20,7 @@ import StudentPage from './pages/StudentPage';
 import AdminPage from './pages/AdminPage';
 import HealthCheckupRegistrationPage from './pages/health/HealthCheckupRegistrationPage';
 import VehicleRegistrationPage from './pages/vehicle/VehicleRegistrationPage';
+import PlateDetectionPage from './pages/vehicle/PlateDetectionPage';
 import ExtensionApprovalPage from './pages/admin/ExtensionApprovalPage';
 import RoomRegistrationApprovalPage from './pages/admin/RoomRegistrationApprovalPage';
 import RoomCancellationApprovalPage from './pages/admin/RoomCancellationApprovalPage';
@@ -60,6 +61,7 @@ function App() {
             <Route path="/admin" element={<AdminPage />} />
             <Route path="/health-checkup" element={<HealthCheckupRegistrationPageWrapper />} />
             <Route path="/vehicle-registration" element={<VehicleRegistrationPageWrapper />} />
+            <Route path="/plate-detection" element={<PlateDetectionPageWrapper />} />
             <Route path="/extension-approval" element={<ExtensionApprovalPageWrapper />} />
             <Route path="/room-registration-approval" element={<RoomRegistrationApprovalPageWrapper />} />
             <Route path="/room-cancellation-approval" element={<RoomCancellationApprovalPageWrapper />} />
@@ -364,6 +366,19 @@ const VehicleRegistrationPageWrapper = () => {
   return (
     <VehicleRegistrationPage
       onSuccess={handleSuccess}
+      onCancel={handleCancel}
+    />
+  );
+};
+
+// Plate Detection Page Wrapper
+const PlateDetectionPageWrapper = () => {
+  const handleCancel = () => {
+    window.location.href = '/admin';
+  };
+
+  return (
+    <PlateDetectionPage
       onCancel={handleCancel}
     />
   );

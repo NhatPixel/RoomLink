@@ -144,15 +144,8 @@ const LoginPage = () => {
     setShowFaceLogin(true);
   };
 
-  const handleFaceLoginSuccess = (userData) => {
-    console.log('Face login successful:', userData);
-    
-    // Redirect based on role
-    if (userData.role === 'admin') {
-      window.location.href = '/admin';
-    } else {
-      window.location.href = '/student';
-    }
+  const handleFaceLoginSuccess = () => {
+    // Component tự động redirect sau khi đăng nhập thành công
   };
 
   const handleFaceLoginCancel = () => {
