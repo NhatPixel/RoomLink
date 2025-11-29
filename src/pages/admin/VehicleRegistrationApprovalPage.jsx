@@ -228,15 +228,11 @@ const VehicleRegistrationApprovalPage = ({ onSuccess, onCancel }) => {
     try {
       // Gửi một request duyệt nhiều đơn cùng lúc
       const response = await numberPlateApi.approveNumberPlate(selectedRequests);
-      const result = response.data?.data || response.data;
       
-      const successMessage = response.message || response.data?.message;
-      const errorMessage = response.message || response.data?.message;
-      
-      if (successMessage) {
-        showSuccess(successMessage);
-      } else if (errorMessage) {
-        showError(errorMessage);
+      if (response.success !== false) {
+        showSuccess(response.message || response.data?.message || 'Duyệt đơn đăng ký biển số thành công!');
+      } else {
+        showError(response.message || response.data?.message || 'Có lỗi xảy ra khi duyệt đơn.');
       }
       
       // Reload danh sách và statistics
@@ -283,16 +279,10 @@ const VehicleRegistrationApprovalPage = ({ onSuccess, onCancel }) => {
       const response = await numberPlateApi.rejectNumberPlate(selectedRequests, reasonsData);
       console.log('API Response:', response);
       
-      const result = response.data?.data || response.data;
-      console.log('Kết quả từ chối:', result);
-      
-      const successMessage = response.message || response.data?.message;
-      const errorMessage = response.message || response.data?.message;
-      
-      if (successMessage) {
-        showSuccess(successMessage);
-      } else if (errorMessage) {
-        showError(errorMessage);
+      if (response.success !== false) {
+        showSuccess(response.message || response.data?.message || 'Từ chối đơn đăng ký biển số thành công!');
+      } else {
+        showError(response.message || response.data?.message || 'Có lỗi xảy ra khi từ chối đơn.');
       }
       
       setShowRejectionModal(false);

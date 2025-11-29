@@ -1,0 +1,989 @@
+-- ============================================
+-- TẠO CÁC ĐƠN ĐỂ ADMIN DUYỆT (20 ĐƠN MỖI LOẠI)
+-- ============================================
+-- Tạo 60 users mới (20 cho hủy, 20 cho chuyển, 20 cho gia hạn)
+-- Đảm bảo không trùng email, phone, identification, MSSV
+-- 
+-- HƯỚNG DẪN SỬ DỤNG:
+-- 1. Chạy tất cả query từ đầu đến cuối trong một lần (hoặc copy toàn bộ và chạy)
+-- 2. Nếu có lỗi, kiểm tra các query kiểm tra ở đầu và cuối để xem bước nào bị lỗi
+-- 3. Có thể chạy từng phần riêng biệt (BƯỚC 0, BƯỚC 1, BƯỚC 2, BƯỚC 3)
+-- 
+-- LƯU Ý: MySQL không hỗ trợ transaction với DDL (CREATE TEMPORARY TABLE)
+-- Nên các query sẽ chạy tuần tự, nếu lỗi ở giữa chừng cần rollback thủ công
+
+-- BẮT ĐẦU TRANSACTION (cho các DML queries - INSERT, UPDATE, DELETE)
+START TRANSACTION;
+
+-- Bật chế độ tự động rollback khi có lỗi
+SET @sql_mode_old = @@sql_mode;
+SET SESSION sql_mode = 'STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
+
+-- Lấy password hash và admin ID
+SET @password_hash = '$2b$10$rQZ8vK5J5J5J5J5J5J5J5OeJ5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J5J';
+SET @admin_id = (SELECT id FROM Admins LIMIT 1);
+
+-- ============================================
+-- XÓA DỮ LIỆU CŨ (NẾU CÓ) ĐỂ TRÁNH TRÙNG
+-- ============================================
+-- Xóa các users, students, và dữ liệu liên quan đã tạo trước đó (nếu có)
+-- Sử dụng derived table để tránh lỗi safe update mode
+
+-- Tạo bảng tạm chứa IDs cần xóa
+CREATE TEMPORARY TABLE IF NOT EXISTS temp_users_to_delete AS
+SELECT u.id as userId
+FROM Users u
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND (u.name LIKE 'Lê Văn %' OR u.name LIKE 'Phạm Văn %' OR u.name LIKE 'Hoàng Văn %');
+
+CREATE TEMPORARY TABLE IF NOT EXISTS temp_students_to_delete AS
+SELECT s.id as studentId
+FROM Students s
+INNER JOIN temp_users_to_delete tud ON s.userId = tud.userId;
+
+CREATE TEMPORARY TABLE IF NOT EXISTS temp_registrations_to_delete AS
+SELECT rr.id as registrationId
+FROM RoomRegistrations rr
+INNER JOIN temp_students_to_delete tsd ON rr.studentId = tsd.studentId;
+
+-- Xóa CancellationInfos liên quan
+DELETE FROM CancellationInfos
+WHERE roomRegistrationId IN (SELECT registrationId FROM temp_registrations_to_delete);
+
+-- Xóa RoomRegistrations liên quan
+DELETE FROM RoomRegistrations
+WHERE id IN (SELECT registrationId FROM temp_registrations_to_delete);
+
+-- Xóa Students liên quan
+DELETE FROM Students
+WHERE id IN (SELECT studentId FROM temp_students_to_delete);
+
+-- Xóa Users liên quan
+DELETE FROM Users
+WHERE id IN (SELECT userId FROM temp_users_to_delete);
+
+-- Xóa bảng tạm
+DROP TEMPORARY TABLE IF EXISTS temp_users_to_delete;
+DROP TEMPORARY TABLE IF EXISTS temp_students_to_delete;
+DROP TEMPORARY TABLE IF EXISTS temp_registrations_to_delete;
+
+-- ============================================
+-- KIỂM TRA ĐIỀU KIỆN TRƯỚC KHI BẮT ĐẦU
+-- ============================================
+
+-- Kiểm tra có Admin không
+SELECT IF(COUNT(*) = 0, 'ERROR: Không có Admin trong hệ thống', CONCAT('OK: Có ', COUNT(*), ' Admin')) as admin_check
+FROM Admins;
+
+-- Kiểm tra có Building 'Tòa G' không
+SELECT IF(COUNT(*) = 0, 'ERROR: Không có Tòa G', 'OK: Có Tòa G') as building_check
+FROM Buildings WHERE name = 'Tòa G';
+
+-- Kiểm tra có RoomTypes không
+SELECT IF(COUNT(*) < 3, CONCAT('ERROR: Thiếu RoomTypes (chỉ có ', COUNT(*), ')'), CONCAT('OK: Có ', COUNT(*), ' RoomTypes')) as roomtype_check
+FROM RoomTypes;
+
+-- Kiểm tra có Floors cho Tòa G không
+SELECT IF(COUNT(*) < 4, CONCAT('ERROR: Thiếu Floors cho Tòa G (chỉ có ', COUNT(*), ')'), CONCAT('OK: Có ', COUNT(*), ' Floors cho Tòa G')) as floor_check
+FROM Floors f
+INNER JOIN Buildings b ON f.buildingId = b.id
+WHERE b.name = 'Tòa G' AND f.number IN (1, 2, 3, 4);
+
+-- Kiểm tra có đủ slot trống ở tầng 4 không (cho 60 đơn CONFIRMED)
+SELECT COUNT(*) as available_slots_floor4 FROM RoomSlots rs2
+INNER JOIN Rooms r2 ON rs2.roomId = r2.id
+INNER JOIN Floors f2 ON r2.floorId = f2.id
+INNER JOIN Buildings b2 ON f2.buildingId = b2.id
+WHERE b2.name = 'Tòa G'
+  AND f2.number = 4
+  AND rs2.isOccupied = false;
+-- Phải có ít nhất 60 slots trống
+
+-- ============================================
+-- BƯỚC 0: TẠO 60 USERS MỚI VÀ ĐƠN CONFIRMED
+-- ============================================
+
+-- Tạo 20 users cho đơn hủy phòng (Lê Văn A-T)
+INSERT INTO Users (id, name, identification, password, dob, gender, phone, email, nation, region, address, status, createdAt, updatedAt)
+VALUES
+(UUID(), 'Lê Văn A', '0999900001', @password_hash, '2003-01-25', 'male', '0401000001', 'levana@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 41, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Lê Văn B', '0999900002', @password_hash, '2003-02-25', 'female', '0401000002', 'levanb@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 42, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Lê Văn C', '0999900003', @password_hash, '2003-03-25', 'male', '0401000003', 'levanc@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 43, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Lê Văn D', '0999900004', @password_hash, '2003-04-25', 'female', '0401000004', 'levand@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 44, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Lê Văn E', '0999900005', @password_hash, '2003-05-25', 'male', '0401000005', 'levane@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 45, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Lê Văn F', '0999900006', @password_hash, '2003-06-25', 'female', '0401000006', 'levanf@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 46, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Lê Văn G', '0999900007', @password_hash, '2003-07-25', 'male', '0401000007', 'levang@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 47, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Lê Văn H', '0999900008', @password_hash, '2003-08-25', 'female', '0401000008', 'levanh@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 48, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Lê Văn I', '0999900009', @password_hash, '2003-09-25', 'male', '0401000009', 'levani@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 49, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Lê Văn J', '0999900010', @password_hash, '2003-10-25', 'female', '0401000010', 'levanj@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 50, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Lê Văn K', '0999900011', @password_hash, '2003-11-25', 'male', '0401000011', 'levank@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 51, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Lê Văn L', '0999900012', @password_hash, '2003-12-25', 'female', '0401000012', 'levanl@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 52, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Lê Văn M', '0999900013', @password_hash, '2004-01-25', 'male', '0401000013', 'levanm@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 53, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Lê Văn N', '0999900014', @password_hash, '2004-02-25', 'female', '0401000014', 'levann@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 54, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Lê Văn O', '0999900015', @password_hash, '2004-03-25', 'male', '0401000015', 'levano@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 55, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Lê Văn P', '0999900016', @password_hash, '2004-04-25', 'female', '0401000016', 'levanp@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 56, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Lê Văn Q', '0999900017', @password_hash, '2004-05-25', 'male', '0401000017', 'levanq@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 57, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Lê Văn R', '0999900018', @password_hash, '2004-06-25', 'female', '0401000018', 'levanr@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 58, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Lê Văn S', '0999900019', @password_hash, '2004-07-25', 'male', '0401000019', 'levans@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 59, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Lê Văn T', '0999900020', @password_hash, '2004-08-25', 'female', '0401000020', 'levant@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 60, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW());
+
+-- Kiểm tra sau khi tạo 20 users Lê Văn: Phải có 20 users
+SELECT IF(COUNT(*) != 20, 1, 0) INTO @check_users_le FROM Users
+WHERE email LIKE '%@student.hcmute.edu.vn'
+  AND status = 'APPROVED_CHANGED'
+  AND name LIKE 'Lê Văn %';
+SET @error_count = IFNULL(@error_count, 0) + @check_users_le;
+SELECT IF(@check_users_le = 1, 'ERROR: Số lượng users Lê Văn không đúng (phải = 20)', CONCAT('OK: Có ', COUNT(*), ' users Lê Văn')) as check_users_le_result
+FROM Users
+WHERE email LIKE '%@student.hcmute.edu.vn'
+  AND status = 'APPROVED_CHANGED'
+  AND name LIKE 'Lê Văn %';
+
+-- Tạo 20 users cho đơn chuyển phòng (Phạm Văn A-T)
+INSERT INTO Users (id, name, identification, password, dob, gender, phone, email, nation, region, address, status, createdAt, updatedAt)
+VALUES
+(UUID(), 'Phạm Văn A', '0999900021', @password_hash, '2003-01-30', 'male', '0501000001', 'phamvana@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 61, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Phạm Văn B', '0999900022', @password_hash, '2003-02-28', 'female', '0501000002', 'phamvanb@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 62, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Phạm Văn C', '0999900023', @password_hash, '2003-03-31', 'male', '0501000003', 'phamvanc@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 63, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Phạm Văn D', '0999900024', @password_hash, '2003-04-30', 'female', '0501000004', 'phamvand@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 64, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Phạm Văn E', '0999900025', @password_hash, '2003-05-31', 'male', '0501000005', 'phamvane@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 65, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Phạm Văn F', '0999900026', @password_hash, '2003-06-30', 'female', '0501000006', 'phamvanf@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 66, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Phạm Văn G', '0999900027', @password_hash, '2003-07-31', 'male', '0501000007', 'phamvang@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 67, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Phạm Văn H', '0999900028', @password_hash, '2003-08-31', 'female', '0501000008', 'phamvanh@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 68, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Phạm Văn I', '0999900029', @password_hash, '2003-09-30', 'male', '0501000009', 'phamvani@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 69, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Phạm Văn J', '0999900030', @password_hash, '2003-10-31', 'female', '0501000010', 'phamvanj@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 70, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Phạm Văn K', '0999900031', @password_hash, '2003-11-30', 'male', '0501000011', 'phamvank@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 71, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Phạm Văn L', '0999900032', @password_hash, '2003-12-31', 'female', '0501000012', 'phamvanl@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 72, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Phạm Văn M', '0999900033', @password_hash, '2004-01-31', 'male', '0501000013', 'phamvanm@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 73, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Phạm Văn N', '0999900034', @password_hash, '2004-02-29', 'female', '0501000014', 'phamvann@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 74, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Phạm Văn O', '0999900035', @password_hash, '2004-03-31', 'male', '0501000015', 'phamvano@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 75, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Phạm Văn P', '0999900036', @password_hash, '2004-04-30', 'female', '0501000016', 'phamvanp@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 76, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Phạm Văn Q', '0999900037', @password_hash, '2004-05-31', 'male', '0501000017', 'phamvanq@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 77, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Phạm Văn R', '0999900038', @password_hash, '2004-06-30', 'female', '0501000018', 'phamvanr@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 78, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Phạm Văn S', '0999900039', @password_hash, '2004-07-31', 'male', '0501000019', 'phamvans@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 79, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Phạm Văn T', '0999900040', @password_hash, '2004-08-31', 'female', '0501000020', 'phamvant@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 80, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW());
+
+-- Kiểm tra sau khi tạo 20 users Phạm Văn: Phải có 20 users
+SELECT IF(COUNT(*) != 20, 1, 0) INTO @check_users_pham FROM Users
+WHERE email LIKE '%@student.hcmute.edu.vn'
+  AND status = 'APPROVED_CHANGED'
+  AND name LIKE 'Phạm Văn %';
+SET @error_count = IFNULL(@error_count, 0) + @check_users_pham;
+SELECT IF(@check_users_pham = 1, 'ERROR: Số lượng users Phạm Văn không đúng (phải = 20)', CONCAT('OK: Có ', COUNT(*), ' users Phạm Văn')) as check_users_pham_result
+FROM Users
+WHERE email LIKE '%@student.hcmute.edu.vn'
+  AND status = 'APPROVED_CHANGED'
+  AND name LIKE 'Phạm Văn %';
+
+-- Tạo 20 users cho đơn gia hạn phòng (Hoàng Văn A-T)
+INSERT INTO Users (id, name, identification, password, dob, gender, phone, email, nation, region, address, status, createdAt, updatedAt)
+VALUES
+(UUID(), 'Hoàng Văn A', '0999900041', @password_hash, '2003-02-05', 'male', '0601000001', 'hoangvana@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 81, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Hoàng Văn B', '0999900042', @password_hash, '2003-03-05', 'female', '0601000002', 'hoangvanb@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 82, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Hoàng Văn C', '0999900043', @password_hash, '2003-04-05', 'male', '0601000003', 'hoangvanc@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 83, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Hoàng Văn D', '0999900044', @password_hash, '2003-05-05', 'female', '0601000004', 'hoangvand@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 84, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Hoàng Văn E', '0999900045', @password_hash, '2003-06-05', 'male', '0601000005', 'hoangvane@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 85, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Hoàng Văn F', '0999900046', @password_hash, '2003-07-05', 'female', '0601000006', 'hoangvanf@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 86, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Hoàng Văn G', '0999900047', @password_hash, '2003-08-05', 'male', '0601000007', 'hoangvang@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 87, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Hoàng Văn H', '0999900048', @password_hash, '2003-09-05', 'female', '0601000008', 'hoangvanh@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 88, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Hoàng Văn I', '0999900049', @password_hash, '2003-10-05', 'male', '0601000009', 'hoangvani@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 89, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Hoàng Văn J', '0999900050', @password_hash, '2003-11-05', 'female', '0601000010', 'hoangvanj@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 90, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Hoàng Văn K', '0999900051', @password_hash, '2003-12-05', 'male', '0601000011', 'hoangvank@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 91, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Hoàng Văn L', '0999900052', @password_hash, '2004-01-05', 'female', '0601000012', 'hoangvanl@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 92, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Hoàng Văn M', '0999900053', @password_hash, '2004-02-05', 'male', '0601000013', 'hoangvanm@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 93, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Hoàng Văn N', '0999900054', @password_hash, '2004-03-05', 'female', '0601000014', 'hoangvann@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 94, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Hoàng Văn O', '0999900055', @password_hash, '2004-04-05', 'male', '0601000015', 'hoangvano@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 95, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Hoàng Văn P', '0999900056', @password_hash, '2004-05-05', 'female', '0601000016', 'hoangvanp@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 96, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Hoàng Văn Q', '0999900057', @password_hash, '2004-06-05', 'male', '0601000017', 'hoangvanq@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 97, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Hoàng Văn R', '0999900058', @password_hash, '2004-07-05', 'female', '0601000018', 'hoangvanr@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 98, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Hoàng Văn S', '0999900059', @password_hash, '2004-08-05', 'male', '0601000019', 'hoangvans@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 99, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW()),
+(UUID(), 'Hoàng Văn T', '0999900060', @password_hash, '2004-09-05', 'female', '0601000020', 'hoangvant@student.hcmute.edu.vn', 'Việt Nam', 'Không', 'Khu phố 100, TP. Thủ Đức, TP.HCM', 'APPROVED_CHANGED', NOW(), NOW());
+
+-- Kiểm tra sau khi tạo 20 users Hoàng Văn: Phải có 20 users
+SELECT IF(COUNT(*) != 20, 1, 0) INTO @check_users_hoang FROM Users
+WHERE email LIKE '%@student.hcmute.edu.vn'
+  AND status = 'APPROVED_CHANGED'
+  AND name LIKE 'Hoàng Văn %';
+SET @error_count = IFNULL(@error_count, 0) + @check_users_hoang;
+SELECT IF(@check_users_hoang = 1, 'ERROR: Số lượng users Hoàng Văn không đúng (phải = 20)', CONCAT('OK: Có ', COUNT(*), ' users Hoàng Văn')) as check_users_hoang_result
+FROM Users
+WHERE email LIKE '%@student.hcmute.edu.vn'
+  AND status = 'APPROVED_CHANGED'
+  AND name LIKE 'Hoàng Văn %';
+
+-- Nếu có lỗi ở bước tạo users, rollback ngay
+-- (MySQL không hỗ trợ IF trong transaction, nên cần kiểm tra thủ công)
+-- Nếu @error_count > 0 ở đây, cần ROLLBACK và dừng lại
+
+-- Tạo Students cho 60 users mới
+INSERT INTO Students (id, userId, mssv, school, createdAt, updatedAt)
+SELECT 
+    UUID() as id,
+    u.id as userId,
+    CONCAT('32122', LPAD(ROW_NUMBER() OVER (ORDER BY u.createdAt), 3, '0')) as mssv,
+    'Trường đại học Sư Phạm Kỹ Thuật TP. HCM' as school,
+    NOW() as createdAt,
+    NOW() as updatedAt
+FROM Users u
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND (u.name LIKE 'Lê Văn %' OR u.name LIKE 'Phạm Văn %' OR u.name LIKE 'Hoàng Văn %')
+ORDER BY u.createdAt
+LIMIT 60;
+
+-- Kiểm tra sau khi tạo Students: Phải có 60 students
+SET @error_count = 0;
+SELECT IF(COUNT(*) != 60, 1, 0) INTO @check_students_step0 FROM Students s
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND (u.name LIKE 'Lê Văn %' OR u.name LIKE 'Phạm Văn %' OR u.name LIKE 'Hoàng Văn %');
+SET @error_count = @error_count + @check_students_step0;
+SELECT IF(@check_students_step0 = 1, 'ERROR: Số lượng Students không đúng (phải = 60)', CONCAT('OK: Có ', COUNT(*), ' Students')) as check_students_step0_result
+FROM Students s
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND (u.name LIKE 'Lê Văn %' OR u.name LIKE 'Phạm Văn %' OR u.name LIKE 'Hoàng Văn %');
+
+-- TẠO PHÒNG VÀ ROOMSLOTS CHO TẦNG 4 (NẾU CHƯA CÓ)
+-- Lấy các ID cần thiết
+SET @building_g_id = (SELECT id FROM Buildings WHERE name = 'Tòa G' LIMIT 1);
+SET @floor_4_id = (SELECT id FROM Floors WHERE buildingId = @building_g_id AND number = 4 LIMIT 1);
+SET @room_type_2 = (SELECT id FROM RoomTypes WHERE type = 'Phòng 2 người' LIMIT 1);
+SET @room_type_4 = (SELECT id FROM RoomTypes WHERE type = 'Phòng 4 người' LIMIT 1);
+SET @room_type_6 = (SELECT id FROM RoomTypes WHERE type = 'Phòng 6 người' LIMIT 1);
+
+-- Tạo tầng 4 nếu chưa có
+INSERT INTO Floors (id, number, buildingId, createdAt, updatedAt)
+SELECT UUID(), 4, @building_g_id, NOW(), NOW()
+WHERE NOT EXISTS (SELECT 1 FROM Floors WHERE buildingId = @building_g_id AND number = 4);
+
+-- Cập nhật lại @floor_4_id sau khi tạo
+SET @floor_4_id = (SELECT id FROM Floors WHERE buildingId = @building_g_id AND number = 4 LIMIT 1);
+
+-- Tạo phòng ở tầng 4 (G400-G419) nếu chưa có - đảm bảo có đủ 60+ slots
+INSERT INTO Rooms (id, roomNumber, capacity, monthlyFee, floorId, roomTypeId, createdAt, updatedAt)
+SELECT UUID(), CONCAT('G4', LPAD(num, 2, '0')), 
+       CASE WHEN num <= 2 THEN 2 WHEN num <= 6 THEN 4 ELSE 6 END,
+       CASE WHEN num <= 2 THEN 1500000.00 WHEN num <= 6 THEN 2000000.00 ELSE 2500000.00 END,
+       @floor_4_id,
+       CASE WHEN num <= 2 THEN @room_type_2 WHEN num <= 6 THEN @room_type_4 ELSE @room_type_6 END,
+       NOW(), NOW()
+FROM (
+    SELECT 0 as num UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 
+    UNION SELECT 5 UNION SELECT 6 UNION SELECT 7 UNION SELECT 8 UNION SELECT 9
+    UNION SELECT 10 UNION SELECT 11 UNION SELECT 12 UNION SELECT 13 UNION SELECT 14
+    UNION SELECT 15 UNION SELECT 16 UNION SELECT 17 UNION SELECT 18 UNION SELECT 19
+) numbers
+WHERE NOT EXISTS (
+    SELECT 1 FROM Rooms r 
+    WHERE r.roomNumber = CONCAT('G4', LPAD(numbers.num, 2, '0'))
+      AND r.floorId = @floor_4_id
+);
+
+-- Tạo RoomSlots cho các phòng ở tầng 4
+INSERT INTO RoomSlots (id, slotNumber, isOccupied, roomId, createdAt, updatedAt)
+SELECT 
+    UUID() as id,
+    slot_num as slotNumber,
+    false as isOccupied,
+    r.id as roomId,
+    NOW() as createdAt,
+    NOW() as updatedAt
+FROM Rooms r
+INNER JOIN Floors f ON r.floorId = f.id
+CROSS JOIN (
+    SELECT 1 as slot_num UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6
+) slots
+WHERE f.buildingId = @building_g_id
+  AND f.number = 4
+  AND r.roomNumber LIKE 'G4%'
+  AND slots.slot_num <= r.capacity
+  AND NOT EXISTS (
+      SELECT 1 FROM RoomSlots rs 
+      WHERE rs.roomId = r.id AND rs.slotNumber = slots.slot_num
+  )
+ORDER BY r.roomNumber, slots.slot_num;
+
+-- Kiểm tra số lượng slot trống ở tầng 4 sau khi tạo
+SELECT COUNT(*) as available_slots_floor4_after_creation FROM RoomSlots rs2
+INNER JOIN Rooms r2 ON rs2.roomId = r2.id
+INNER JOIN Floors f2 ON r2.floorId = f2.id
+INNER JOIN Buildings b2 ON f2.buildingId = b2.id
+WHERE b2.name = 'Tòa G'
+  AND f2.number = 4
+  AND rs2.isOccupied = false;
+-- Phải có ít nhất 60 slots trống
+
+-- Tạo đơn CONFIRMED cho 60 users mới (từ tầng 4)
+CREATE TEMPORARY TABLE temp_new_students AS
+SELECT s.id as studentId, 
+       ROW_NUMBER() OVER (ORDER BY s.createdAt) as rn
+FROM Students s
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND (u.name LIKE 'Lê Văn %' OR u.name LIKE 'Phạm Văn %' OR u.name LIKE 'Hoàng Văn %')
+ORDER BY s.createdAt
+LIMIT 60;
+
+CREATE TEMPORARY TABLE temp_new_slots_for_confirmed AS
+SELECT rs2.id as roomSlotId,
+       ROW_NUMBER() OVER (ORDER BY r2.roomNumber, rs2.slotNumber) as rn
+FROM RoomSlots rs2
+INNER JOIN Rooms r2 ON rs2.roomId = r2.id
+INNER JOIN Floors f2 ON r2.floorId = f2.id
+INNER JOIN Buildings b2 ON f2.buildingId = b2.id
+WHERE b2.name = 'Tòa G'
+  AND f2.number = 4
+  AND rs2.isOccupied = false
+ORDER BY r2.roomNumber, rs2.slotNumber
+LIMIT 60;
+
+INSERT INTO RoomRegistrations (id, registerDate, approvedDate, endDate, duration, status, studentId, roomSlotId, adminId, previousRegistrationId, createdAt, updatedAt)
+SELECT 
+    UUID() as id,
+    DATE_SUB(CURDATE(), INTERVAL 30 DAY) as registerDate,
+    DATE_SUB(CURDATE(), INTERVAL 25 DAY) as approvedDate,
+    DATE_ADD(CURDATE(), INTERVAL 210 DAY) as endDate,
+    '8' as duration,
+    'CONFIRMED' as status,
+    tns.studentId as studentId,
+    tnsf.roomSlotId as roomSlotId,
+    @admin_id as adminId,
+    NULL as previousRegistrationId,
+    NOW() as createdAt,
+    NOW() as updatedAt
+FROM temp_new_students tns
+INNER JOIN temp_new_slots_for_confirmed tnsf ON tns.rn = tnsf.rn;
+
+UPDATE RoomSlots rs
+INNER JOIN temp_new_slots_for_confirmed tnsf ON rs.id = tnsf.roomSlotId
+SET rs.isOccupied = true;
+
+-- Kiểm tra sau khi tạo đơn CONFIRMED: Phải có 60 đơn CONFIRMED
+SELECT IF(COUNT(*) != 60, 1, 0) INTO @check_confirmed_step0 FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND (u.name LIKE 'Lê Văn %' OR u.name LIKE 'Phạm Văn %' OR u.name LIKE 'Hoàng Văn %')
+  AND rr.status = 'CONFIRMED';
+SET @error_count = @error_count + @check_confirmed_step0;
+SELECT IF(@check_confirmed_step0 = 1, 'ERROR: Số lượng đơn CONFIRMED không đúng (phải = 60)', CONCAT('OK: Có ', COUNT(*), ' đơn CONFIRMED')) as check_confirmed_step0_result
+FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND (u.name LIKE 'Lê Văn %' OR u.name LIKE 'Phạm Văn %' OR u.name LIKE 'Hoàng Văn %')
+  AND rr.status = 'CONFIRMED';
+
+DROP TEMPORARY TABLE IF EXISTS temp_new_students;
+DROP TEMPORARY TABLE IF EXISTS temp_new_slots_for_confirmed;
+
+-- ============================================
+-- BƯỚC 1: TẠO 20 ĐƠN HỦY PHÒNG (CANCELED) - Lê Văn A-T
+-- ============================================
+
+-- Cập nhật status thành CANCELED cho 20 đơn CONFIRMED
+UPDATE RoomRegistrations rr
+INNER JOIN (
+    SELECT rr2.id
+    FROM RoomRegistrations rr2
+    INNER JOIN Students s ON rr2.studentId = s.id
+    INNER JOIN Users u ON s.userId = u.id
+    WHERE u.email LIKE '%@student.hcmute.edu.vn'
+      AND u.status = 'APPROVED_CHANGED'
+      AND u.name LIKE 'Lê Văn %'
+      AND rr2.status = 'CONFIRMED'
+    ORDER BY rr2.createdAt
+    LIMIT 20
+) ids ON rr.id = ids.id
+SET rr.status = 'CANCELED',
+    rr.updatedAt = NOW();
+
+-- Tạo CancellationInfo cho 20 đơn hủy
+INSERT INTO CancellationInfos (id, roomRegistrationId, reason, checkoutDate, refundStatus, amount, createdAt, updatedAt)
+SELECT 
+    UUID() as id,
+    rr.id as roomRegistrationId,
+    'Sinh viên yêu cầu hủy phòng do hoàn cảnh gia đình' as reason,
+    DATE_SUB(rr.endDate, INTERVAL 60 DAY) as checkoutDate,
+    'PENDING' as refundStatus,
+    (DATEDIFF(rr.endDate, DATE_SUB(rr.endDate, INTERVAL 60 DAY)) / 30) * r.monthlyFee as amount,
+    NOW() as createdAt,
+    NOW() as updatedAt
+FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+INNER JOIN RoomSlots rs ON rr.roomSlotId = rs.id
+INNER JOIN Rooms r ON rs.roomId = r.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND u.name LIKE 'Lê Văn %'
+  AND rr.status = 'CANCELED'
+  AND NOT EXISTS (
+      SELECT 1 FROM CancellationInfos ci WHERE ci.roomRegistrationId = rr.id
+  );
+
+-- Giải phóng RoomSlots cho 20 đơn hủy
+UPDATE RoomSlots rs
+INNER JOIN (
+    SELECT rr.roomSlotId
+    FROM RoomRegistrations rr
+    INNER JOIN Students s ON rr.studentId = s.id
+    INNER JOIN Users u ON s.userId = u.id
+    WHERE u.email LIKE '%@student.hcmute.edu.vn'
+      AND u.status = 'APPROVED_CHANGED'
+      AND u.name LIKE 'Lê Văn %'
+      AND rr.status = 'CANCELED'
+) slot_ids ON rs.id = slot_ids.roomSlotId
+SET rs.isOccupied = false;
+
+-- Kiểm tra sau BƯỚC 1: Phải có 20 đơn CANCELED và 20 CancellationInfo
+SELECT IF(COUNT(*) != 20, 1, 0) INTO @check_canceled_step1 FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND u.name LIKE 'Lê Văn %'
+  AND rr.status = 'CANCELED';
+SET @error_count = @error_count + @check_canceled_step1;
+SELECT IF(@check_canceled_step1 = 1, 'ERROR: Số lượng đơn CANCELED không đúng (phải = 20)', CONCAT('OK: Có ', COUNT(*), ' đơn CANCELED')) as check_canceled_step1_result
+FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND u.name LIKE 'Lê Văn %'
+  AND rr.status = 'CANCELED';
+
+SELECT IF(COUNT(*) != 20, 1, 0) INTO @check_cancellation_info_step1 FROM CancellationInfos ci
+INNER JOIN RoomRegistrations rr ON ci.roomRegistrationId = rr.id
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND u.name LIKE 'Lê Văn %';
+SET @error_count = @error_count + @check_cancellation_info_step1;
+SELECT IF(@check_cancellation_info_step1 = 1, 'ERROR: Số lượng CancellationInfo không đúng (phải = 20)', CONCAT('OK: Có ', COUNT(*), ' CancellationInfo')) as check_cancellation_info_step1_result
+FROM CancellationInfos ci
+INNER JOIN RoomRegistrations rr ON ci.roomRegistrationId = rr.id
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND u.name LIKE 'Lê Văn %';
+
+-- ============================================
+-- BƯỚC 2: TẠO 20 ĐƠN CHUYỂN PHÒNG (MOVE_PENDING) - Phạm Văn A-T
+-- ============================================
+
+-- TẠO THÊM PHÒNG Ở TẦNG 1-3 ĐỂ ĐẢM BẢO CÓ ĐỦ 20 SLOT TRỐNG
+-- Lấy các ID cần thiết
+SET @building_g_id = (SELECT id FROM Buildings WHERE name = 'Tòa G' LIMIT 1);
+SET @floor_1_id = (SELECT id FROM Floors WHERE buildingId = @building_g_id AND number = 1 LIMIT 1);
+SET @floor_2_id = (SELECT id FROM Floors WHERE buildingId = @building_g_id AND number = 2 LIMIT 1);
+SET @floor_3_id = (SELECT id FROM Floors WHERE buildingId = @building_g_id AND number = 3 LIMIT 1);
+SET @room_type_2 = (SELECT id FROM RoomTypes WHERE type = 'Phòng 2 người' LIMIT 1);
+SET @room_type_4 = (SELECT id FROM RoomTypes WHERE type = 'Phòng 4 người' LIMIT 1);
+SET @room_type_6 = (SELECT id FROM RoomTypes WHERE type = 'Phòng 6 người' LIMIT 1);
+
+-- Tạo thêm 10 phòng ở tầng 1 (G110-G119) để đảm bảo có đủ slot
+INSERT INTO Rooms (id, roomNumber, capacity, monthlyFee, floorId, roomTypeId, createdAt, updatedAt)
+SELECT UUID(), CONCAT('G1', LPAD(num, 2, '0')), 
+       CASE WHEN num <= 3 THEN 2 WHEN num <= 7 THEN 4 ELSE 6 END,
+       CASE WHEN num <= 3 THEN 1500000.00 WHEN num <= 7 THEN 2000000.00 ELSE 2500000.00 END,
+       @floor_1_id,
+       CASE WHEN num <= 3 THEN @room_type_2 WHEN num <= 7 THEN @room_type_4 ELSE @room_type_6 END,
+       NOW(), NOW()
+FROM (
+    SELECT 10 as num UNION SELECT 11 UNION SELECT 12 UNION SELECT 13 UNION SELECT 14 
+    UNION SELECT 15 UNION SELECT 16 UNION SELECT 17 UNION SELECT 18 UNION SELECT 19
+) numbers
+WHERE NOT EXISTS (
+    SELECT 1 FROM Rooms r 
+    WHERE r.roomNumber = CONCAT('G1', LPAD(numbers.num, 2, '0'))
+      AND r.floorId = @floor_1_id
+);
+
+-- Tạo RoomSlots cho các phòng mới ở tầng 1
+INSERT INTO RoomSlots (id, slotNumber, isOccupied, roomId, createdAt, updatedAt)
+SELECT 
+    UUID() as id,
+    slot_num as slotNumber,
+    false as isOccupied,
+    r.id as roomId,
+    NOW() as createdAt,
+    NOW() as updatedAt
+FROM Rooms r
+INNER JOIN Floors f ON r.floorId = f.id
+CROSS JOIN (
+    SELECT 1 as slot_num UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6
+) slots
+WHERE f.buildingId = @building_g_id
+  AND f.number = 1
+  AND r.roomNumber LIKE 'G1%'
+  AND r.roomNumber >= 'G110'
+  AND slots.slot_num <= r.capacity
+  AND NOT EXISTS (
+      SELECT 1 FROM RoomSlots rs 
+      WHERE rs.roomId = r.id AND rs.slotNumber = slots.slot_num
+  )
+ORDER BY r.roomNumber, slots.slot_num;
+
+-- Tạo thêm 10 phòng ở tầng 2 (G210-G219) để đảm bảo có đủ slot
+INSERT INTO Rooms (id, roomNumber, capacity, monthlyFee, floorId, roomTypeId, createdAt, updatedAt)
+SELECT UUID(), CONCAT('G2', LPAD(num, 2, '0')), 
+       CASE WHEN num <= 3 THEN 2 WHEN num <= 7 THEN 4 ELSE 6 END,
+       CASE WHEN num <= 3 THEN 1500000.00 WHEN num <= 7 THEN 2000000.00 ELSE 2500000.00 END,
+       @floor_2_id,
+       CASE WHEN num <= 3 THEN @room_type_2 WHEN num <= 7 THEN @room_type_4 ELSE @room_type_6 END,
+       NOW(), NOW()
+FROM (
+    SELECT 10 as num UNION SELECT 11 UNION SELECT 12 UNION SELECT 13 UNION SELECT 14 
+    UNION SELECT 15 UNION SELECT 16 UNION SELECT 17 UNION SELECT 18 UNION SELECT 19
+) numbers
+WHERE NOT EXISTS (
+    SELECT 1 FROM Rooms r 
+    WHERE r.roomNumber = CONCAT('G2', LPAD(numbers.num, 2, '0'))
+      AND r.floorId = @floor_2_id
+);
+
+-- Tạo RoomSlots cho các phòng mới ở tầng 2
+INSERT INTO RoomSlots (id, slotNumber, isOccupied, roomId, createdAt, updatedAt)
+SELECT 
+    UUID() as id,
+    slot_num as slotNumber,
+    false as isOccupied,
+    r.id as roomId,
+    NOW() as createdAt,
+    NOW() as updatedAt
+FROM Rooms r
+INNER JOIN Floors f ON r.floorId = f.id
+CROSS JOIN (
+    SELECT 1 as slot_num UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6
+) slots
+WHERE f.buildingId = @building_g_id
+  AND f.number = 2
+  AND r.roomNumber LIKE 'G2%'
+  AND r.roomNumber >= 'G210'
+  AND slots.slot_num <= r.capacity
+  AND NOT EXISTS (
+      SELECT 1 FROM RoomSlots rs 
+      WHERE rs.roomId = r.id AND rs.slotNumber = slots.slot_num
+  )
+ORDER BY r.roomNumber, slots.slot_num;
+
+-- KIỂM TRA SỐ LƯỢNG SLOT TRỐNG TỪ TẦNG 1-3
+SELECT COUNT(*) as available_slots_floor123 FROM RoomSlots rs2
+INNER JOIN Rooms r2 ON rs2.roomId = r2.id
+INNER JOIN Floors f2 ON r2.floorId = f2.id
+INNER JOIN Buildings b2 ON f2.buildingId = b2.id
+WHERE b2.name = 'Tòa G'
+  AND f2.number IN (1, 2, 3)
+  AND rs2.isOccupied = false;
+-- Phải có ít nhất 20 slots trống
+
+-- Tạo bảng tạm chứa 20 đơn CONFIRMED cần chuyển phòng
+CREATE TEMPORARY TABLE temp_move_registrations AS
+SELECT rr.id as originalRegistrationId,
+       rr.studentId,
+       rr.roomSlotId as oldRoomSlotId,
+       ROW_NUMBER() OVER (ORDER BY rr.createdAt) as rn
+FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND u.name LIKE 'Phạm Văn %'
+  AND rr.status = 'CONFIRMED'
+  AND NOT EXISTS (
+      SELECT 1 FROM RoomRegistrations rr2 
+      WHERE rr2.previousRegistrationId = rr.id 
+        AND rr2.status IN ('PENDING', 'CONFIRMED', 'MOVE_PENDING')
+  )
+ORDER BY rr.createdAt
+LIMIT 20;
+
+-- Tạo bảng tạm chứa 20 slot mới trống (từ tầng 1-3, không phải tầng 4)
+CREATE TEMPORARY TABLE temp_new_slots AS
+SELECT rs2.id as newRoomSlotId,
+       ROW_NUMBER() OVER (ORDER BY r2.roomNumber, rs2.slotNumber) as rn
+FROM RoomSlots rs2
+INNER JOIN Rooms r2 ON rs2.roomId = r2.id
+INNER JOIN Floors f2 ON r2.floorId = f2.id
+INNER JOIN Buildings b2 ON f2.buildingId = b2.id
+WHERE b2.name = 'Tòa G'
+  AND f2.number IN (1, 2, 3)
+  AND rs2.isOccupied = false
+  AND rs2.id NOT IN (SELECT oldRoomSlotId FROM temp_move_registrations)
+ORDER BY r2.roomNumber, rs2.slotNumber
+LIMIT 20;
+
+-- Cập nhật status đơn gốc thành MOVE_PENDING
+UPDATE RoomRegistrations rr
+INNER JOIN temp_move_registrations tmr ON rr.id = tmr.originalRegistrationId
+SET rr.status = 'MOVE_PENDING',
+    rr.updatedAt = NOW();
+
+-- Tạo đơn chuyển phòng mới (PENDING)
+INSERT INTO RoomRegistrations (id, registerDate, approvedDate, endDate, duration, status, studentId, roomSlotId, adminId, previousRegistrationId, createdAt, updatedAt)
+SELECT 
+    UUID() as id,
+    CURDATE() as registerDate,
+    NULL as approvedDate,
+    DATE_ADD(rr.endDate, INTERVAL 0 DAY) as endDate,
+    rr.duration as duration,
+    'PENDING' as status,
+    tmr.studentId as studentId,
+    tns.newRoomSlotId as roomSlotId,
+    NULL as adminId,
+    tmr.originalRegistrationId as previousRegistrationId,
+    NOW() as createdAt,
+    NOW() as updatedAt
+FROM temp_move_registrations tmr
+INNER JOIN temp_new_slots tns ON tmr.rn = tns.rn
+INNER JOIN RoomRegistrations rr ON tmr.originalRegistrationId = rr.id;
+
+-- Kiểm tra sau BƯỚC 2: Phải có 20 đơn MOVE_PENDING và 20 đơn PENDING mới
+SELECT IF(COUNT(*) != 20, 1, 0) INTO @check_move_pending_step2 FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND u.name LIKE 'Phạm Văn %'
+  AND rr.status = 'MOVE_PENDING';
+SET @error_count = @error_count + @check_move_pending_step2;
+SELECT IF(@check_move_pending_step2 = 1, 'ERROR: Số lượng đơn MOVE_PENDING không đúng (phải = 20)', CONCAT('OK: Có ', COUNT(*), ' đơn MOVE_PENDING')) as check_move_pending_step2_result
+FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND u.name LIKE 'Phạm Văn %'
+  AND rr.status = 'MOVE_PENDING';
+
+SELECT IF(COUNT(*) != 20, 1, 0) INTO @check_pending_move_step2 FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND u.name LIKE 'Phạm Văn %'
+  AND rr.status = 'PENDING'
+  AND rr.previousRegistrationId IS NOT NULL;
+SET @error_count = @error_count + @check_pending_move_step2;
+SELECT IF(@check_pending_move_step2 = 1, 'ERROR: Số lượng đơn PENDING (chuyển phòng) không đúng (phải = 20)', CONCAT('OK: Có ', COUNT(*), ' đơn PENDING (chuyển phòng)')) as check_pending_move_step2_result
+FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND u.name LIKE 'Phạm Văn %'
+  AND rr.status = 'PENDING'
+  AND rr.previousRegistrationId IS NOT NULL;
+
+-- Xóa bảng tạm
+DROP TEMPORARY TABLE IF EXISTS temp_move_registrations;
+DROP TEMPORARY TABLE IF EXISTS temp_new_slots;
+
+-- ============================================
+-- BƯỚC 3: TẠO 20 ĐƠN GIA HẠN PHÒNG (EXTENDING) - Hoàng Văn A-T
+-- ============================================
+
+-- Tạo bảng tạm chứa 20 đơn CONFIRMED cần gia hạn (chưa có EXTENDING)
+CREATE TEMPORARY TABLE temp_extend_registrations AS
+SELECT rr.id as originalRegistrationId,
+       rr.studentId,
+       rr.roomSlotId,
+       rr.endDate,
+       ROW_NUMBER() OVER (ORDER BY rr.createdAt) as rn
+FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND u.name LIKE 'Hoàng Văn %'
+  AND rr.status = 'CONFIRMED'
+  AND NOT EXISTS (
+      SELECT 1 FROM RoomRegistrations rr2 
+      WHERE rr2.previousRegistrationId = rr.id 
+        AND rr2.status IN ('EXTENDING', 'PENDING_EXTENDED', 'EXTENDED')
+  )
+ORDER BY rr.createdAt
+LIMIT 20;
+
+-- Cập nhật status đơn gốc thành EXTENDING
+UPDATE RoomRegistrations rr
+INNER JOIN temp_extend_registrations ter ON rr.id = ter.originalRegistrationId
+SET rr.status = 'EXTENDING',
+    rr.updatedAt = NOW();
+
+-- Tạo đơn gia hạn mới (PENDING_EXTENDED)
+INSERT INTO RoomRegistrations (id, registerDate, approvedDate, endDate, duration, status, studentId, roomSlotId, adminId, previousRegistrationId, createdAt, updatedAt)
+SELECT 
+    UUID() as id,
+    CURDATE() as registerDate,
+    ter.endDate as approvedDate,
+    DATE_ADD(ter.endDate, INTERVAL 8 MONTH) as endDate,
+    '8' as duration,
+    'PENDING_EXTENDED' as status,
+    ter.studentId as studentId,
+    ter.roomSlotId as roomSlotId,
+    NULL as adminId,
+    ter.originalRegistrationId as previousRegistrationId,
+    NOW() as createdAt,
+    NOW() as updatedAt
+FROM temp_extend_registrations ter;
+
+-- Kiểm tra sau BƯỚC 3: Phải có 20 đơn EXTENDING và 20 đơn PENDING_EXTENDED
+SELECT IF(COUNT(*) != 20, 1, 0) INTO @check_extending_step3 FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND u.name LIKE 'Hoàng Văn %'
+  AND rr.status = 'EXTENDING';
+SET @error_count = @error_count + @check_extending_step3;
+SELECT IF(@check_extending_step3 = 1, 'ERROR: Số lượng đơn EXTENDING không đúng (phải = 20)', CONCAT('OK: Có ', COUNT(*), ' đơn EXTENDING')) as check_extending_step3_result
+FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND u.name LIKE 'Hoàng Văn %'
+  AND rr.status = 'EXTENDING';
+
+SELECT IF(COUNT(*) != 20, 1, 0) INTO @check_pending_extended_step3 FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND u.name LIKE 'Hoàng Văn %'
+  AND rr.status = 'PENDING_EXTENDED';
+SET @error_count = @error_count + @check_pending_extended_step3;
+SELECT IF(@check_pending_extended_step3 = 1, 'ERROR: Số lượng đơn PENDING_EXTENDED không đúng (phải = 20)', CONCAT('OK: Có ', COUNT(*), ' đơn PENDING_EXTENDED')) as check_pending_extended_step3_result
+FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND u.name LIKE 'Hoàng Văn %'
+  AND rr.status = 'PENDING_EXTENDED';
+
+-- Xóa bảng tạm
+DROP TEMPORARY TABLE IF EXISTS temp_extend_registrations;
+
+-- ============================================
+-- KIỂM TRA KẾT QUẢ
+-- ============================================
+
+-- Kiểm tra số lượng đơn hủy phòng (CANCELED)
+SELECT COUNT(*) as total_canceled FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND u.name LIKE 'Lê Văn %'
+  AND rr.status = 'CANCELED';
+-- Phải có 20 đơn
+
+-- Kiểm tra số lượng đơn chuyển phòng (MOVE_PENDING)
+SELECT COUNT(*) as total_move_pending FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND u.name LIKE 'Phạm Văn %'
+  AND rr.status = 'MOVE_PENDING';
+-- Phải có 20 đơn
+
+-- Kiểm tra số lượng đơn gia hạn phòng (EXTENDING)
+SELECT COUNT(*) as total_extending FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND u.name LIKE 'Hoàng Văn %'
+  AND rr.status = 'EXTENDING';
+-- Phải có 20 đơn
+
+-- ============================================
+-- KIỂM TRA TỔNG KẾT
+-- ============================================
+
+-- Kiểm tra tổng số users mới đã tạo
+SELECT COUNT(*) as total_new_users FROM Users u
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND (u.name LIKE 'Lê Văn %' OR u.name LIKE 'Phạm Văn %' OR u.name LIKE 'Hoàng Văn %');
+-- Phải có 60 users
+
+-- Kiểm tra tổng số students mới đã tạo
+SELECT COUNT(*) as total_new_students FROM Students s
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND (u.name LIKE 'Lê Văn %' OR u.name LIKE 'Phạm Văn %' OR u.name LIKE 'Hoàng Văn %');
+-- Phải có 60 students
+
+-- Kiểm tra tổng số đơn CONFIRMED mới đã tạo
+SELECT COUNT(*) as total_new_confirmed FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND (u.name LIKE 'Lê Văn %' OR u.name LIKE 'Phạm Văn %' OR u.name LIKE 'Hoàng Văn %')
+  AND rr.status = 'CONFIRMED';
+-- Phải có 60 đơn CONFIRMED
+
+-- ============================================
+-- KIỂM TRA CUỐI CÙNG TRƯỚC KHI COMMIT
+-- ============================================
+-- Lưu ý: @error_count đã được tăng dần qua các bước kiểm tra ở trên
+-- Nếu chưa có @error_count, khởi tạo = 0
+SET @error_count = IFNULL(@error_count, 0);
+
+-- Kiểm tra 1: Tổng số users mới phải = 60
+SELECT IF(COUNT(*) != 60, 1, 0) INTO @check_users FROM Users u
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND (u.name LIKE 'Lê Văn %' OR u.name LIKE 'Phạm Văn %' OR u.name LIKE 'Hoàng Văn %');
+SET @error_count = @error_count + @check_users;
+SELECT IF(@check_users = 1, 'ERROR: Số lượng users mới không đúng (phải = 60)', CONCAT('OK: Có ', COUNT(*), ' users mới')) as check_users_result
+FROM Users u
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND (u.name LIKE 'Lê Văn %' OR u.name LIKE 'Phạm Văn %' OR u.name LIKE 'Hoàng Văn %');
+
+-- Kiểm tra 2: Tổng số students mới phải = 60
+SELECT IF(COUNT(*) != 60, 1, 0) INTO @check_students FROM Students s
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND (u.name LIKE 'Lê Văn %' OR u.name LIKE 'Phạm Văn %' OR u.name LIKE 'Hoàng Văn %');
+SET @error_count = @error_count + @check_students;
+SELECT IF(@check_students = 1, 'ERROR: Số lượng students mới không đúng (phải = 60)', CONCAT('OK: Có ', COUNT(*), ' students mới')) as check_students_result
+FROM Students s
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND (u.name LIKE 'Lê Văn %' OR u.name LIKE 'Phạm Văn %' OR u.name LIKE 'Hoàng Văn %');
+
+-- Kiểm tra 3: Tổng số đơn CONFIRMED mới phải = 60
+SELECT IF(COUNT(*) != 60, 1, 0) INTO @check_confirmed FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND (u.name LIKE 'Lê Văn %' OR u.name LIKE 'Phạm Văn %' OR u.name LIKE 'Hoàng Văn %')
+  AND rr.status = 'CONFIRMED';
+SET @error_count = @error_count + @check_confirmed;
+SELECT IF(@check_confirmed = 1, 'ERROR: Số lượng đơn CONFIRMED mới không đúng (phải = 60)', CONCAT('OK: Có ', COUNT(*), ' đơn CONFIRMED mới')) as check_confirmed_result
+FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND (u.name LIKE 'Lê Văn %' OR u.name LIKE 'Phạm Văn %' OR u.name LIKE 'Hoàng Văn %')
+  AND rr.status = 'CONFIRMED';
+
+-- Kiểm tra 4: Số lượng đơn hủy phòng phải = 20
+SELECT IF(COUNT(*) != 20, 1, 0) INTO @check_canceled FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND u.name LIKE 'Lê Văn %'
+  AND rr.status = 'CANCELED';
+SET @error_count = @error_count + @check_canceled;
+SELECT IF(@check_canceled = 1, 'ERROR: Số lượng đơn hủy phòng không đúng (phải = 20)', CONCAT('OK: Có ', COUNT(*), ' đơn hủy phòng')) as check_canceled_result
+FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND u.name LIKE 'Lê Văn %'
+  AND rr.status = 'CANCELED';
+
+-- Kiểm tra 5: Số lượng đơn chuyển phòng phải = 20
+SELECT IF(COUNT(*) != 20, 1, 0) INTO @check_move_pending FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND u.name LIKE 'Phạm Văn %'
+  AND rr.status = 'MOVE_PENDING';
+SET @error_count = @error_count + @check_move_pending;
+SELECT IF(@check_move_pending = 1, 'ERROR: Số lượng đơn chuyển phòng không đúng (phải = 20)', CONCAT('OK: Có ', COUNT(*), ' đơn chuyển phòng')) as check_move_pending_result
+FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND u.name LIKE 'Phạm Văn %'
+  AND rr.status = 'MOVE_PENDING';
+
+-- Kiểm tra 6: Số lượng đơn gia hạn phòng phải = 20
+SELECT IF(COUNT(*) != 20, 1, 0) INTO @check_extending FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND u.name LIKE 'Hoàng Văn %'
+  AND rr.status = 'EXTENDING';
+SET @error_count = @error_count + @check_extending;
+SELECT IF(@check_extending = 1, 'ERROR: Số lượng đơn gia hạn phòng không đúng (phải = 20)', CONCAT('OK: Có ', COUNT(*), ' đơn gia hạn phòng')) as check_extending_result
+FROM RoomRegistrations rr
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND u.name LIKE 'Hoàng Văn %'
+  AND rr.status = 'EXTENDING';
+
+-- Kiểm tra 7: Số lượng CancellationInfo phải = 20
+SELECT IF(COUNT(*) != 20, 1, 0) INTO @check_cancellation_info FROM CancellationInfos ci
+INNER JOIN RoomRegistrations rr ON ci.roomRegistrationId = rr.id
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND u.name LIKE 'Lê Văn %';
+SET @error_count = @error_count + @check_cancellation_info;
+SELECT IF(@check_cancellation_info = 1, 'ERROR: Số lượng CancellationInfo không đúng (phải = 20)', CONCAT('OK: Có ', COUNT(*), ' CancellationInfo')) as check_cancellation_info_result
+FROM CancellationInfos ci
+INNER JOIN RoomRegistrations rr ON ci.roomRegistrationId = rr.id
+INNER JOIN Students s ON rr.studentId = s.id
+INNER JOIN Users u ON s.userId = u.id
+WHERE u.email LIKE '%@student.hcmute.edu.vn'
+  AND u.status = 'APPROVED_CHANGED'
+  AND u.name LIKE 'Lê Văn %';
+
+-- Hiển thị tổng số lỗi và quyết định commit/rollback
+SELECT 
+    @error_count as total_errors,
+    IF(@error_count = 0, 
+       '✅ SUCCESS: Tất cả kiểm tra đều PASS - Sẽ COMMIT', 
+       CONCAT('❌ ERROR: Có ', @error_count, ' lỗi - Cần ROLLBACK!')) as final_status,
+    'Hướng dẫn: Xem @error_count ở trên. Nếu = 0 thì chạy COMMIT, nếu > 0 thì chạy ROLLBACK' as instruction;
+
+-- ============================================
+-- KẾT THÚC TRANSACTION
+-- ============================================
+-- QUAN TRỌNG: XEM KẾT QUẢ @error_count Ở TRÊN TRƯỚC KHI QUYẾT ĐỊNH COMMIT/ROLLBACK
+-- 
+-- Nếu @error_count = 0: Tất cả đều OK, chạy COMMIT (dòng dưới)
+-- Nếu @error_count > 0: Có lỗi, chạy ROLLBACK (bỏ comment dòng ROLLBACK và comment dòng COMMIT)
+
+-- Khôi phục sql_mode
+SET SESSION sql_mode = @sql_mode_old;
+
+-- Nếu tất cả kiểm tra đều OK (@error_count = 0):
+COMMIT;
+
+-- Nếu có lỗi (@error_count > 0), bỏ comment dòng dưới và comment dòng COMMIT:
+-- ROLLBACK;

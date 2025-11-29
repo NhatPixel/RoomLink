@@ -481,7 +481,7 @@ const VehicleRegistrationPage = ({ onSuccess, onCancel }) => {
           {loadingPlates ? (
             <div className="text-center py-8 text-gray-500">Đang tải...</div>
           ) : numberPlates.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">Chưa có biển số nào được đăng ký</div>
+            <div className="text-center py-8 text-gray-500">Chưa có biển số nào được đăng ký.</div>
           ) : (
             <div className="grid grid-cols-5 gap-4">
               {numberPlates.map((plate) => (
