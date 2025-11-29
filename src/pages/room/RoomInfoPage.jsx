@@ -14,6 +14,7 @@ const RoomInfoPage = ({ onCancel }) => {
   const [roomData, setRoomData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [hasActiveRenewal, setHasActiveRenewal] = useState(false);
+  const [loadingRenewal, setLoadingRenewal] = useState(true);
 
   useEffect(() => {
     const fetchRoomData = async () => {
@@ -61,6 +62,7 @@ const RoomInfoPage = ({ onCancel }) => {
 
     const checkActiveRenewal = async () => {
       try {
+        setLoadingRenewal(true);
         const response = await renewalApi.getActive();
         if (response.success !== false && response.data) {
           setHasActiveRenewal(true);
@@ -69,6 +71,8 @@ const RoomInfoPage = ({ onCancel }) => {
         }
       } catch (error) {
         setHasActiveRenewal(false);
+      } finally {
+        setLoadingRenewal(false);
       }
     };
 
@@ -100,7 +104,6 @@ const RoomInfoPage = ({ onCancel }) => {
     }).format(numAmount);
   };
 
-
   return (
     <PageLayout
       title="Thông tin phòng ở"
@@ -108,38 +111,40 @@ const RoomInfoPage = ({ onCancel }) => {
       showClose={true}
       onClose={onCancel}
       headerActions={
-        <div className="flex flex-wrap gap-2">
-          {hasActiveRenewal && (
-            <>
-              <Button
-                variant="primary"
-                size="small"
-                onClick={() => window.location.href = '/room-extension'}
-              >
-                Gia hạn phòng
-              </Button>
-              <Button
-                variant="outline"
-                size="small"
-                onClick={() => window.location.href = '/room-transfer'}
-              >
-                Chuyển phòng
-              </Button>
-            </>
-          )}
-          <Button
-            variant="outline"
-            size="small"
-            onClick={() => window.location.href = '/room-cancellation'}
-          >
-            Hủy phòng
-          </Button>
-        </div>
+        !loadingRenewal && (
+          <div className="flex flex-wrap gap-2">
+            {hasActiveRenewal && (
+              <>
+                <Button
+                  variant="primary"
+                  size="small"
+                  onClick={() => window.location.href = '/room-extension'}
+                >
+                  Gia hạn phòng
+                </Button>
+                <Button
+                  variant="outline"
+                  size="small"
+                  onClick={() => window.location.href = '/room-transfer'}
+                >
+                  Chuyển phòng
+                </Button>
+              </>
+            )}
+            <Button
+              variant="outline"
+              size="small"
+              onClick={() => window.location.href = '/room-cancellation'}
+            >
+              Hủy phòng
+            </Button>
+          </div>
+        )
       }
     >
       <LoadingState
-        isLoading={loading}
-        isEmpty={!loading && !roomData}
+        isLoading={loading || loadingRenewal}
+        isEmpty={!loading && !loadingRenewal && !roomData}
         emptyState={
           <div className="text-center text-gray-500 mt-8">
             Bạn chưa có thông tin phòng ở.

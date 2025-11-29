@@ -1,7 +1,19 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import Button from '../components/ui/Button';
+import LoadingState from '../components/ui/LoadingState';
 
 const AdminPage = () => {
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Simulate initial loading
+    const timer = setTimeout(() => {
+      setLoading(false);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, []);
+
   const handleChangePassword = () => {
     window.location.href = '/change-password';
   };
@@ -65,8 +77,9 @@ const AdminPage = () => {
         <div className="bg-white rounded-lg shadow-lg p-8">
           <h1 className="text-3xl font-bold text-gray-800 mb-8">Trang Quản Trị</h1>
           
-          {/* Nhóm 1: Quản lý sinh viên */}
-          <div className="mb-8">
+          <LoadingState isLoading={loading}>
+            {/* Nhóm 1: Quản lý sinh viên */}
+            <div className="mb-8">
             <h2 className="text-xl font-semibold text-gray-700 mb-4 flex items-center">
               <span className="w-2 h-2 bg-blue-500 rounded-full mr-3"></span>
               Quản lý sinh viên
@@ -174,6 +187,7 @@ const AdminPage = () => {
               </div>
             </div>
           </div>
+          </LoadingState>
           
           <div className="mt-8">
             <Button

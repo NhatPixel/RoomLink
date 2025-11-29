@@ -132,16 +132,6 @@ const EditProfile = ({ onSuccess, onCancel }) => {
     return phone.replace(/(\d{4})(\d{3})(\d{3})/, '$1 $2 $3');
   };
 
-  if (isLoadingProfile) {
-    return (
-      <div className="min-h-screen bg-gray-50 py-8">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <LoadingState isLoading={true} />
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -151,7 +141,8 @@ const EditProfile = ({ onSuccess, onCancel }) => {
           <p className="mt-2 text-gray-600">Xem và chỉnh sửa thông tin cá nhân của bạn</p>
         </div>
 
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
+        <LoadingState isLoading={isLoadingProfile}>
+          <div className="bg-white rounded-lg shadow-md overflow-hidden">
           {/* Profile Header */}
           <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-8">
             <div className="flex flex-col md:flex-row items-center space-y-4 md:space-y-0 md:space-x-6">
@@ -394,8 +385,8 @@ const EditProfile = ({ onSuccess, onCancel }) => {
             </div>
           </div>
         )}
+        </LoadingState>
       </div>
-
     </div>
   );
 };

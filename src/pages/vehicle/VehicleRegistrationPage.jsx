@@ -7,6 +7,8 @@ import FileUploadButton from '../../components/ui/FileUploadButton';
 import InfoBox from '../../components/ui/InfoBox';
 import PageLayout from '../../components/layout/PageLayout';
 import ImageEditorModal from '../../components/modal/ImageEditorModal';
+import BaseModal, { ModalBody } from '../../components/modal/BaseModal';
+import StatusBadge from '../../components/ui/StatusBadge';
 import numberPlateApi from '../../api/numberPlateApi';
 import { hasPlate } from '../../services/plateDetectionService';
 
@@ -20,6 +22,11 @@ const VehicleRegistrationPage = ({ onSuccess, onCancel }) => {
   const [editingImage, setEditingImage] = useState(null); // { type: 'numberPlate', src: string }
   const [detectingPlate, setDetectingPlate] = useState(false);
   const [plateDetected, setPlateDetected] = useState(null); // null: chưa kiểm tra, true: có biển số, false: không có
+  const [numberPlates, setNumberPlates] = useState([]);
+  const [loadingPlates, setLoadingPlates] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [selectedPlate, setSelectedPlate] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const fileInputRef = useRef(null);
 
   // Store original file separately to preserve quality when re-editing
@@ -40,6 +47,13 @@ const VehicleRegistrationPage = ({ onSuccess, onCancel }) => {
     position: { x: 0, y: 0 }
   });
 
+  // Load number plates on mount
+  useEffect(() => {
+    if (user) {
+      loadNumberPlates();
+    }
+  }, [user]);
+
   // Cleanup preview URLs on unmount
   useEffect(() => {
     return () => {
@@ -54,6 +68,20 @@ const VehicleRegistrationPage = ({ onSuccess, onCancel }) => {
       }
     };
   }, []);
+
+  const loadNumberPlates = async () => {
+    try {
+      setLoadingPlates(true);
+      const response = await numberPlateApi.getNumberPlateByUser();
+      if (response.success && response.data) {
+        setNumberPlates(response.data);
+      }
+    } catch (error) {
+      console.error('Error loading number plates:', error);
+    } finally {
+      setLoadingPlates(false);
+    }
+  };
 
   const handleInputChange = (e) => { 
     const { name, value } = e.target; 
@@ -210,6 +238,52 @@ const VehicleRegistrationPage = ({ onSuccess, onCancel }) => {
     return plate.replace(/\s/g, '').toUpperCase();
   };
 
+  const handleDeleteClick = (plate) => {
+    setSelectedPlate(plate);
+    setShowDeleteModal(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!selectedPlate) return;
+
+    try {
+      setDeleting(true);
+      const response = await numberPlateApi.deleteNumberPlate(selectedPlate.id);
+      
+      if (response.success) {
+        showSuccess('Xóa biển số xe thành công.');
+        await loadNumberPlates();
+        setShowDeleteModal(false);
+        setSelectedPlate(null);
+      }
+    } catch (error) {
+      console.error('Error deleting number plate:', error);
+      showError(error?.response?.data?.message || 'Có lỗi xảy ra khi xóa biển số xe. Vui lòng thử lại.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('vi-VN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return '';
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      return imagePath;
+    }
+    return `http://localhost:3000${imagePath}`;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault(); 
     setLoading(true);
@@ -252,6 +326,9 @@ const VehicleRegistrationPage = ({ onSuccess, onCancel }) => {
           fileInputRef.current.value = '';
         }
         
+        // Reload number plates list
+        await loadNumberPlates();
+        
         // Call onSuccess callback sau 1.5s
         setTimeout(() => {
           if (onSuccess) {
@@ -293,7 +370,7 @@ const VehicleRegistrationPage = ({ onSuccess, onCancel }) => {
             type="text"
             value={formData.licensePlate}
             onChange={handleInputChange}
-            placeholder="VD: 12A-12345, 12-AB12345, 12-AB1234"
+            placeholder="VD: 12A12345, 12AB12345, 12AB1234"
             required
           />
 
@@ -393,6 +470,102 @@ const VehicleRegistrationPage = ({ onSuccess, onCancel }) => {
           </div>
         </form>
       </PageLayout>
+
+      {/* Danh sách biển số đã đăng ký - Section riêng */}
+      <div className="w-full px-4 -mt-40 pb-8">
+        <div className="bg-white rounded-lg shadow-lg p-8">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-gray-800">Danh sách biển số đã đăng ký</h2>
+            <p className="text-gray-600 mt-1">Quản lý các biển số xe đã đăng ký</p>
+          </div>
+          {loadingPlates ? (
+            <div className="text-center py-8 text-gray-500">Đang tải...</div>
+          ) : numberPlates.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">Chưa có biển số nào được đăng ký</div>
+          ) : (
+            <div className="grid grid-cols-5 gap-4">
+              {numberPlates.map((plate) => (
+                <div
+                  key={plate.id}
+                  className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow flex flex-col bg-white"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-base font-semibold text-gray-800 truncate flex-1">{plate.number}</h4>
+                    <Button
+                      variant="danger"
+                      size="small"
+                      onClick={() => handleDeleteClick(plate)}
+                      disabled={deleting}
+                      className="ml-2 flex-shrink-0"
+                    >
+                      Xóa
+                    </Button>
+                  </div>
+                  <div className="mb-2">
+                    <StatusBadge status={plate.status} isApprovalStatus={true} size="small" />
+                  </div>
+                  <p className="text-xs text-gray-600 mb-3">
+                    {formatDate(plate.registerDate)}
+                  </p>
+                  {plate.image && (
+                    <div className="mt-auto">
+                      <img
+                        src={getImageUrl(plate.image)}
+                        alt={`Biển số ${plate.number}`}
+                        className="w-full h-24 object-contain border border-gray-200 rounded-lg bg-gray-50"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && selectedPlate && (
+        <BaseModal
+          isOpen={showDeleteModal}
+          onClose={() => {
+            setShowDeleteModal(false);
+            setSelectedPlate(null);
+          }}
+          title="Xác nhận xóa"
+          size="small"
+          closeOnOverlayClick={true}
+          zIndex={60}
+        >
+          <ModalBody>
+            <p className="text-gray-600 mb-6">
+              Bạn có chắc chắn muốn xóa biển số "{selectedPlate.number}"?
+            </p>
+            <div className="flex items-center justify-end space-x-4 pt-4 border-t">
+              <Button 
+                onClick={() => {
+                  setShowDeleteModal(false);
+                  setSelectedPlate(null);
+                }} 
+                variant="outline"
+                disabled={deleting}
+              >
+                Hủy
+              </Button>
+              <Button
+                onClick={handleDeleteConfirm}
+                variant="danger"
+                loading={deleting}
+                loadingText="Đang xóa..."
+              >
+                Xóa
+              </Button>
+            </div>
+          </ModalBody>
+        </BaseModal>
+      )}
     </>
   );
 };

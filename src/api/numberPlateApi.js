@@ -46,6 +46,16 @@ const numberPlateApi = {
       },
     });
   },
+
+  // GET - Lấy danh sách biển số xe của user hiện tại
+  getNumberPlateByUser: () => {
+    return axiosClient.get('/number-plate/getByUser');
+  },
+
+  // DELETE - Xóa biển số xe theo id
+  deleteNumberPlate: (id) => {
+    return axiosClient.delete(`/number-plate/${id}`);
+  },
 };
 
 export default numberPlateApi;
