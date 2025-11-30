@@ -104,6 +104,21 @@ const RoomInfoPage = ({ onCancel }) => {
     }).format(numAmount);
   };
 
+  // Filter để loại bỏ duplicate slots (chỉ giữ slot đầu tiên cho mỗi slotNumber)
+  const getUniqueSlots = (slots) => {
+    if (!slots || slots.length === 0) return [];
+    const seenSlots = new Map();
+    const uniqueSlots = slots.filter((slot) => {
+      if (!seenSlots.has(slot.slotNumber)) {
+        seenSlots.set(slot.slotNumber, slot);
+        return true;
+      }
+      return false;
+    });
+    // Sắp xếp theo slotNumber để hiển thị đúng thứ tự
+    return uniqueSlots.sort((a, b) => a.slotNumber - b.slotNumber);
+  };
+
   return (
     <PageLayout
       title="Thông tin phòng ở"
@@ -225,7 +240,7 @@ const RoomInfoPage = ({ onCancel }) => {
             <div className="mt-6">
               <p className="text-sm font-medium text-gray-700 mb-3">Tình trạng các giường trong phòng</p>
               <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-                {roomData.roomSlot.map((slot) => (
+                {getUniqueSlots(roomData.roomSlot).map((slot) => (
                   <div
                     key={slot.slotNumber}
                     className={`p-4 rounded-lg border-2 ${
