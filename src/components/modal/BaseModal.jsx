@@ -54,20 +54,20 @@ const BaseModal = ({
   };
 
   return (
-    <div 
+    <div
       className="fixed inset-0 overflow-y-auto"
       style={{ zIndex }}
       onClick={handleOverlayClick}
     >
       <div className="flex items-center justify-center min-h-screen px-4 py-4">
         {/* Overlay */}
-        <div 
+        <div
           className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
           aria-hidden="true"
         />
 
         {/* Modal */}
-        <div 
+        <div
           className={`relative bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all ${sizeClasses[size]} w-full ${className}`}
           onClick={handleModalClick}
         >

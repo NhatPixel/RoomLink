@@ -9,7 +9,8 @@ export const setTokenGetter = (fn) => {
 
 
 const axiosClient = axios.create({
-  baseURL: "http://localhost:3000/api",
+  baseURL: "https://roomlink-6im6.onrender.com/api",
+  // baseURL: "http://localhost:3000/api",
   headers: {
     "Content-Type": "application/json",
   },
@@ -31,7 +32,6 @@ axiosClient.interceptors.response.use(
   },
   async (error) => {
     const originalRequest = error.config;
-    
     const publicAuthEndpoints = ['/auth/login', '/auth/register', '/auth/checkCCCD', '/auth/checkAvatar'];
     const isPublicAuthEndpoint = publicAuthEndpoints.some(endpoint => originalRequest.url?.includes(endpoint));
     if (error.response?.status === 401 && !originalRequest._retry && !isPublicAuthEndpoint) {
