@@ -831,16 +831,108 @@ const RoomManagementPage = ({ onSuccess, onCancel }) => {
 
               <div>
                 <h3 className="text-lg font-semibold text-gray-800 mb-3">Thông tin sinh viên</h3>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="mb-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700">Số sinh viên hiện tại</label>
                     <p className="text-gray-900">{selectedRoom.currentResidents}</p>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Sức chứa</label>
-                    <p className="text-gray-900">{selectedRoom.capacity}</p>
-                  </div>
                 </div>
+                
+                {/* Danh sách sinh viên đang ở */}
+                {(() => {
+                  // Extract thông tin sinh viên từ roomSlots
+                  // GetRoomResponse đã transform roomSlots, có thể có 2 cấu trúc:
+                  // 1. Raw Sequelize data: slot.RoomRegistrations (mảng) hoặc slot.RoomRegistration (object)
+                  // 2. Transformed data: slot đã có mssv, name, identification trực tiếp
+                  const students = [];
+                  if (selectedRoom.roomSlots && selectedRoom.roomSlots.length > 0) {
+                    selectedRoom.roomSlots.forEach(slot => {
+                      if (slot.isOccupied) {
+                        // Kiểm tra nếu đã được transform (có mssv, name trực tiếp)
+                        if (slot.mssv && slot.name) {
+                          students.push({
+                            slotNumber: slot.slotNumber,
+                            name: slot.name || 'N/A',
+                            mssv: slot.mssv || 'N/A',
+                            identification: slot.identification || 'N/A',
+                            dob: slot.dob || 'N/A',
+                            registerDate: 'N/A',
+                            endDate: 'N/A',
+                            status: 'N/A'
+                          });
+                        } 
+                        // Nếu chưa transform, kiểm tra RoomRegistrations (mảng) hoặc RoomRegistration (object)
+                        else if (slot.RoomRegistrations || slot.RoomRegistration) {
+                          const registrations = Array.isArray(slot.RoomRegistrations) 
+                            ? slot.RoomRegistrations 
+                            : (slot.RoomRegistration ? [slot.RoomRegistration] : []);
+                          
+                          // Lấy registration hiện tại (status CONFIRMED, EXTENDING, MOVE_PENDING và endDate > hiện tại)
+                          const currentRegistration = registrations.find(reg => {
+                            if (!reg) return false;
+                            const status = reg.status;
+                            const endDate = reg.endDate ? new Date(reg.endDate) : null;
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            
+                            return (status === 'CONFIRMED' || status === 'EXTENDING' || status === 'MOVE_PENDING') &&
+                                   (!endDate || endDate >= today);
+                          });
+                          
+                          if (currentRegistration) {
+                            const student = currentRegistration.Student;
+                            const user = student?.User;
+                            if (user) {
+                              students.push({
+                                slotNumber: slot.slotNumber,
+                                name: user.name || 'N/A',
+                                mssv: student.mssv || 'N/A',
+                                identification: user.identification || 'N/A',
+                                registerDate: currentRegistration.registerDate || 'N/A',
+                                endDate: currentRegistration.endDate || 'N/A',
+                                status: currentRegistration.status || 'N/A'
+                              });
+                            }
+                          }
+                        }
+                      }
+                    });
+                  }
+                  
+                  // Debug log để kiểm tra
+                  console.log('Selected room slots:', selectedRoom.roomSlots);
+                  console.log('Extracted students:', students);
+                  
+                  return students.length > 0 ? (
+                    <div className="mt-4">
+                      <h4 className="text-sm font-semibold text-gray-700 mb-3">Danh sách sinh viên đang ở</h4>
+                      <div className="space-y-3">
+                        {students.map((student, index) => (
+                          <div key={index} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                              <div>
+                                <label className="block text-xs font-medium text-gray-500">Họ và tên</label>
+                                <p className="text-sm font-medium text-gray-900 mt-1">{student.name}</p>
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-500">MSSV</label>
+                                <p className="text-sm text-gray-900 mt-1">{student.mssv}</p>
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-500">CCCD/CMND</label>
+                                <p className="text-sm text-gray-900 mt-1">{student.identification}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="mt-4 text-center py-4 text-gray-500 text-sm">
+                      Chưa có sinh viên nào đang ở trong phòng này.
+                    </div>
+                  );
+                })()}
               </div>
             </div>
             

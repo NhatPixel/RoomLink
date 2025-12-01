@@ -381,10 +381,10 @@ const BillsView = ({ onSuccess, onCancel }) => {
                         <span className="text-gray-500">Hạn thanh toán:</span>
                         <span className="font-medium">{formatDate(bill.dueDate)}</span>
                       </div>
-                      {(bill.paymentType === PAYMENT_TYPES.ELECTRICITY || bill.paymentType === PAYMENT_TYPES.WATER) && (
+                      {bill.description && (
                         <div className="flex justify-between text-sm">
-                          <span className="text-gray-500">Tiêu thụ:</span>
-                          <span className="font-medium">{bill.details.consumption} {bill.paymentType === PAYMENT_TYPES.ELECTRICITY ? 'kWh' : 'm³'}</span>
+                          <span className="text-gray-500">Nội dung:</span>
+                          <span className="font-medium text-right max-w-xs">{bill.description}</span>
                         </div>
                       )}
                     </div>
@@ -609,9 +609,9 @@ const BillsView = ({ onSuccess, onCancel }) => {
                             <div>
                               <p className="font-medium">{bill.billTypeName}</p>
                               {bill.period && <p className="text-sm text-gray-600">Kỳ: {bill.period}</p>}
-                              {(bill.paymentType === PAYMENT_TYPES.ELECTRICITY || bill.paymentType === PAYMENT_TYPES.WATER) && (
+                              {bill.description && (
                                 <p className="text-sm text-gray-600">
-                                  Tiêu thụ: {bill.details.consumption} {bill.paymentType === PAYMENT_TYPES.ELECTRICITY ? 'kWh' : 'm³'}
+                                  Nội dung: {bill.description}
                                 </p>
                               )}
                             </div>

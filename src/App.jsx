@@ -19,7 +19,7 @@ import StudentPage from './pages/StudentPage';
 import AdminPage from './pages/AdminPage';
 import HealthCheckupRegistrationPage from './pages/health/HealthCheckupRegistrationPage';
 import VehicleRegistrationPage from './pages/vehicle/VehicleRegistrationPage';
-import PlateDetectionPage from './pages/vehicle/PlateDetectionPage';
+import PlateDetectionPage from './pages/admin/PlateDetectionPage';
 import ExtensionApprovalPage from './pages/admin/ExtensionApprovalPage';
 import RoomRegistrationApprovalPage from './pages/admin/RoomRegistrationApprovalPage';
 import RoomCancellationApprovalPage from './pages/admin/RoomCancellationApprovalPage';

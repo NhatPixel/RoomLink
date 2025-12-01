@@ -7,7 +7,7 @@ import PageLayout from '../layout/PageLayout';
 import Button from '../ui/Button';
 import InfoBox from '../ui/InfoBox';
 
-const PlateRecognition = ({ onSuccess, onCancel }) => {
+const PlateRecognition = ({ onSuccess, onCancel, onError }) => {
   const { user, isLoading: authLoading } = useAuth();
   const { showSuccess, showError } = useNotification();
   const videoRef = useRef(null);
@@ -136,21 +136,37 @@ const PlateRecognition = ({ onSuccess, onCancel }) => {
       showSuccess('Nhận diện biển số thành công!');
       setStatus('✓ Đã nhận diện biển số thành công');
 
+      // Gọi callback để hiển thị thông tin
+      if (onSuccess) {
+        onSuccess({
+          image: blob,
+          numberPlate: numberPlate,
+          plates: detectedPlates
+        });
+      }
+
+      // Reset flag sau một delay ngắn để tiếp tục quét
+      // Delay này giúp tránh gọi API quá nhiều lần liên tiếp cho cùng một biển số
       setTimeout(() => {
-        if (onSuccess) {
-          onSuccess({
-            image: blob,
-            numberPlate: numberPlate,
-            plates: detectedPlates
-          });
-        }
-      }, 1000);
+        isApiCallingRef.current = false;
+        setStatus('Đang quét biển số xe...');
+      }, 2000); // 2 giây delay trước khi tiếp tục quét
     } catch (err) {
       console.error('Recognize plate error:', err);
       const errorMessage = err.response?.data?.message || err.message || 'Không thể nhận diện biển số';
       showError(errorMessage);
       setStatus('Nhận diện thất bại. Vui lòng thử lại.');
-      isApiCallingRef.current = false;
+      
+      // Gọi callback onError nếu có, truyền cả error và blob image
+      if (onError) {
+        onError(err, { image: blob });
+      }
+      
+      // Reset flag sau khi lỗi để tiếp tục quét
+      setTimeout(() => {
+        isApiCallingRef.current = false;
+        setStatus('Đang quét biển số xe...');
+      }, 1000);
     }
   };
 
