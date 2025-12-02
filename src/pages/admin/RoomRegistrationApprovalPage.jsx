@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNotification } from '../../contexts/NotificationContext';
-import { roomRegistrationApi } from '../../api';
+import { roomRegistrationApi, roomApi } from '../../api';
 import PageLayout from '../../components/layout/PageLayout';
 import Button from '../../components/ui/Button';
 import Select from '../../components/ui/Select';
@@ -35,6 +35,8 @@ const RoomRegistrationApprovalPage = ({ onSuccess, onCancel }) => {
     pending: 0,
     approved: 0
   });
+  const [roomInfo, setRoomInfo] = useState(null);
+  const [loadingRoomInfo, setLoadingRoomInfo] = useState(false);
 
   useEffect(() => {
     loadRoomRegistrations();
@@ -213,12 +215,35 @@ const RoomRegistrationApprovalPage = ({ onSuccess, onCancel }) => {
     }
   };
 
-  const handleViewDetail = (request) => {
+  const handleViewDetail = async (request) => {
     console.log('Request detail:', request);
     console.log('Avatar:', request.avatar);
     console.log('FrontIdentificationImage:', request.frontIdentificationImage);
     setSelectedRequestDetail(request);
     setShowDetailModal(true);
+    
+    // Load thông tin phòng nếu có roomNumber
+    if (request.roomNumber) {
+      setLoadingRoomInfo(true);
+      try {
+        const response = await roomApi.getRoomForAdmin({ roomNumber: request.roomNumber });
+        const roomData = response.data?.data || response.data;
+        if (Array.isArray(roomData) && roomData.length > 0) {
+          setRoomInfo(roomData[0]);
+        } else if (roomData && !Array.isArray(roomData)) {
+          setRoomInfo(roomData);
+        } else {
+          setRoomInfo(null);
+        }
+      } catch (error) {
+        console.error('Error loading room info:', error);
+        setRoomInfo(null);
+      } finally {
+        setLoadingRoomInfo(false);
+      }
+    } else {
+      setRoomInfo(null);
+    }
   };
 
   const handleApproveRequests = async () => {
@@ -540,7 +565,10 @@ const RoomRegistrationApprovalPage = ({ onSuccess, onCancel }) => {
 
       <BaseModal
         isOpen={showDetailModal}
-        onClose={() => setShowDetailModal(false)}
+        onClose={() => {
+          setShowDetailModal(false);
+          setRoomInfo(null);
+        }}
         title="Chi tiết đơn đăng ký KTX"
         size="xlarge"
         closeOnOverlayClick={true}
@@ -635,12 +663,69 @@ const RoomRegistrationApprovalPage = ({ onSuccess, onCancel }) => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Ngày đăng ký</label>
                   <p className="text-gray-900">{formatDate(selectedRequestDetail?.registerDate)}</p>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+            
+            {/* Thông tin phòng */}
+            {selectedRequestDetail?.roomNumber && (
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">Thông tin phòng</h3>
+                {loadingRoomInfo ? (
+                  <div className="text-center py-4">
+                    <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                    <p className="text-sm text-gray-500 mt-2">Đang tải thông tin phòng...</p>
+                  </div>
+                ) : roomInfo ? (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">Số phòng</label>
+                      <p className="text-gray-900">{roomInfo.roomNumber || selectedRequestDetail?.roomNumber}</p>
+                    </div>
+                    {roomInfo.capacity && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Sức chứa</label>
+                        <p className="text-gray-900">{roomInfo.capacity} người</p>
+                      </div>
+                    )}
+                    {roomInfo.monthlyFee && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Phí thuê hàng tháng</label>
+                        <p className="text-gray-900">
+                          {new Intl.NumberFormat('vi-VN', {
+                            style: 'currency',
+                            currency: 'VND'
+                          }).format(roomInfo.monthlyFee)}
+                        </p>
+                      </div>
+                    )}
+                    {roomInfo.floor_number && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Tầng</label>
+                        <p className="text-gray-900">Tầng {roomInfo.floor_number}</p>
+                      </div>
+                    )}
+                    {roomInfo.roomType_type && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Loại phòng</label>
+                        <p className="text-gray-900">{roomInfo.roomType_type}</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-500">
+                    <p>Số phòng: {selectedRequestDetail?.roomNumber}</p>
+                    <p className="mt-2 text-yellow-600">Không thể tải thông tin chi tiết phòng.</p>
+                  </div>
+                )}
+              </div>
+            )}
             
             <div className="flex justify-end pt-4 border-t border-gray-200">
-              <Button onClick={() => setShowDetailModal(false)} variant="outline">
+              <Button onClick={() => {
+                setShowDetailModal(false);
+                setRoomInfo(null);
+              }} variant="outline">
                 Đóng
               </Button>
             </div>
