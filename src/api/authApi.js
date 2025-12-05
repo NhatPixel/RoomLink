@@ -54,8 +54,9 @@ const authApi = {
   loginFace(data) {
     return axiosClient.post("/auth/login-face", data, {
       headers: {
-        "Content-Type": "multipart/form-data"
-      }
+        "Content-Type": "multipart/form-data,",
+      },
+      withCredentials: true
     });
   },
 
