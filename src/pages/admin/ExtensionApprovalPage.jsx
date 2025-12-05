@@ -24,6 +24,8 @@ const ExtensionApprovalPage = ({ onSuccess, onCancel }) => {
   const [itemsPerPage] = useState(5);
   const [filterStatus, setFilterStatus] = useState('All'); // Match backend: All, Unapproved, Approved
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [totalItems, setTotalItems] = useState(0);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedRequestDetail, setSelectedRequestDetail] = useState(null);
@@ -36,29 +38,7 @@ const ExtensionApprovalPage = ({ onSuccess, onCancel }) => {
 
   useEffect(() => {
     loadExtendRoomRequests();
-  }, [filterStatus, currentPage, searchKeyword]);
-
-  useEffect(() => {
-    loadStatistics();
-  }, []);
-
-  const loadStatistics = async () => {
-    try {
-      const [allResponse, unapprovedResponse, approvedResponse] = await Promise.all([
-        roomRegistrationApi.getExtendRoomRequests({ status: 'All', page: 1, limit: 1 }),
-        roomRegistrationApi.getExtendRoomRequests({ status: 'Unapproved', page: 1, limit: 1 }),
-        roomRegistrationApi.getExtendRoomRequests({ status: 'Approved', page: 1, limit: 1 })
-      ]);
-
-      setStatistics({
-        total: allResponse.totalItems || 0,
-        pending: unapprovedResponse.totalItems || 0,
-        approved: approvedResponse.totalItems || 0
-      });
-    } catch (error) {
-      console.error('Error loading statistics:', error);
-    }
-  };
+  }, [filterStatus, currentPage, searchKeyword, startDate, endDate]);
 
   const loadExtendRoomRequests = async () => {
     try {
@@ -71,11 +51,26 @@ const ExtensionApprovalPage = ({ onSuccess, onCancel }) => {
         limit: itemsPerPage,
         keyword: searchKeyword.trim() || undefined
       };
+
+      // Add date filter
+      if (startDate) {
+        params.startDate = startDate;
+      }
+      if (endDate) {
+        params.endDate = endDate;
+      }
       
       const response = await roomRegistrationApi.getExtendRoomRequests(params);
       
       const data = response.data || [];
       const totalItems = response.totalItems || 0;
+      
+      // Update statistics from API response
+      setStatistics({
+        total: totalItems,
+        pending: response.totalUnapproved || 0,
+        approved: response.totalApproved || 0
+      });
       
       if (Array.isArray(data)) {
         const transformed = data.map(item => ({
@@ -223,10 +218,7 @@ const ExtensionApprovalPage = ({ onSuccess, onCancel }) => {
         showError(response.message || response.data?.message || 'Có lỗi xảy ra khi duyệt đơn.');
       }
       
-      await Promise.all([
-        loadExtendRoomRequests(),
-        loadStatistics()
-      ]);
+      await loadExtendRoomRequests();
       
       setSelectedRequests([]);
       
@@ -267,10 +259,7 @@ const ExtensionApprovalPage = ({ onSuccess, onCancel }) => {
       
       setShowRejectionModal(false);
       
-      await Promise.all([
-        loadExtendRoomRequests(),
-        loadStatistics()
-      ]);
+      await loadExtendRoomRequests();
       
       setSelectedRequests([]);
       
@@ -363,6 +352,38 @@ const ExtensionApprovalPage = ({ onSuccess, onCancel }) => {
               <option value="Unapproved">Chờ duyệt</option>
               <option value="Approved">Đã duyệt</option>
             </Select>
+          </div>
+          <div className="w-40">
+            <Input
+              type="date"
+              value={startDate}
+              onChange={(e) => {
+                setStartDate(e.target.value);
+                setCurrentPage(1);
+              }}
+              onClear={startDate ? () => {
+                setStartDate('');
+                setCurrentPage(1);
+              } : undefined}
+              placeholder="Từ ngày"
+              size="medium"
+            />
+          </div>
+          <div className="w-40">
+            <Input
+              type="date"
+              value={endDate}
+              onChange={(e) => {
+                setEndDate(e.target.value);
+                setCurrentPage(1);
+              }}
+              onClear={endDate ? () => {
+                setEndDate('');
+                setCurrentPage(1);
+              } : undefined}
+              placeholder="Đến ngày"
+              size="medium"
+            />
           </div>
           <div className="flex-1">
             <Input

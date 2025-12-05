@@ -29,6 +29,8 @@ const RoomRegistrationApprovalPage = ({ onSuccess, onCancel }) => {
   const [itemsPerPage] = useState(5);
   const [filterStatus, setFilterStatus] = useState('All'); // Match backend: All, Unapproved, Approved
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [totalItems, setTotalItems] = useState(0);
   const [statistics, setStatistics] = useState({
     total: 0,
@@ -40,33 +42,7 @@ const RoomRegistrationApprovalPage = ({ onSuccess, onCancel }) => {
 
   useEffect(() => {
     loadRoomRegistrations();
-  }, [filterStatus, currentPage, searchKeyword]);
-
-  // Load statistics riêng, không phụ thuộc vào filter hoặc page
-  useEffect(() => {
-    loadStatistics();
-  }, []); // Chỉ load một lần khi component mount
-
-  // Load statistics cho tất cả đơn (không phân trang, không filter)
-  const loadStatistics = async () => {
-    try {
-      // Gọi 3 API riêng để lấy số liệu thống kê
-      const [allResponse, unapprovedResponse, approvedResponse] = await Promise.all([
-        roomRegistrationApi.getRoomRegistrations({ status: 'All', page: 1, limit: 1 }),
-        roomRegistrationApi.getRoomRegistrations({ status: 'Unapproved', page: 1, limit: 1 }),
-        roomRegistrationApi.getRoomRegistrations({ status: 'Approved', page: 1, limit: 1 })
-      ]);
-
-      setStatistics({
-        total: allResponse.totalItems || 0,
-        pending: unapprovedResponse.totalItems || 0,
-        approved: approvedResponse.totalItems || 0
-      });
-    } catch (error) {
-      console.error('Error loading statistics:', error);
-      // Không hiển thị error để tránh làm phiền user
-    }
-  };
+  }, [filterStatus, currentPage, searchKeyword, startDate, endDate]);
 
   const loadRoomRegistrations = async () => {
     try {
@@ -80,15 +56,30 @@ const RoomRegistrationApprovalPage = ({ onSuccess, onCancel }) => {
         limit: itemsPerPage,
         keyword: searchKeyword.trim() || undefined // Chỉ gửi keyword nếu có giá trị
       };
+
+      // Add date filter
+      if (startDate) {
+        params.startDate = startDate;
+      }
+      if (endDate) {
+        params.endDate = endDate;
+      }
       
       const response = await roomRegistrationApi.getRoomRegistrations(params);
       
       // axiosClient already returns response.data, so response is ApiResponse object
-      // ApiResponse structure: { success, data, page, limit, totalItems }
+      // ApiResponse structure: { success, data, page, limit, totalItems, totalApproved, totalUnapproved }
       console.log('API Response:', response);
       
       const data = response.data || [];
       const totalItems = response.totalItems || 0;
+      
+      // Update statistics from API response
+      setStatistics({
+        total: totalItems,
+        pending: response.totalUnapproved || 0,
+        approved: response.totalApproved || 0
+      });
       
       console.log('Parsed data:', data);
       console.log('First item sample:', data[0]);
@@ -263,11 +254,8 @@ const RoomRegistrationApprovalPage = ({ onSuccess, onCancel }) => {
         showError(response.message || response.data?.message || 'Có lỗi xảy ra khi duyệt đơn.');
       }
       
-      // Reload danh sách và statistics
-      await Promise.all([
-        loadRoomRegistrations(),
-        loadStatistics()
-      ]);
+      // Reload danh sách
+      await loadRoomRegistrations();
       
       // selectedRequests sẽ được tự động loại bỏ đơn đã duyệt trong loadRoomRegistrations
       // Nhưng cần clear ngay để tránh hiển thị sai
@@ -315,11 +303,8 @@ const RoomRegistrationApprovalPage = ({ onSuccess, onCancel }) => {
       
       setShowRejectionModal(false);
       
-      // Reload danh sách và statistics
-      await Promise.all([
-        loadRoomRegistrations(),
-        loadStatistics()
-      ]);
+      // Reload danh sách
+      await loadRoomRegistrations();
       
       // Clear selectedRequests sau khi reload
       setSelectedRequests([]);
@@ -409,6 +394,38 @@ const RoomRegistrationApprovalPage = ({ onSuccess, onCancel }) => {
                   <option value="Unapproved">Chờ duyệt</option>
                   <option value="Approved">Đã duyệt</option>
                 </Select>
+              </div>
+              <div className="w-40">
+                <Input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => {
+                    setStartDate(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  onClear={startDate ? () => {
+                    setStartDate('');
+                    setCurrentPage(1);
+                  } : undefined}
+                  placeholder="Từ ngày"
+                  size="medium"
+                />
+              </div>
+              <div className="w-40">
+                <Input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => {
+                    setEndDate(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  onClear={endDate ? () => {
+                    setEndDate('');
+                    setCurrentPage(1);
+                  } : undefined}
+                  placeholder="Đến ngày"
+                  size="medium"
+                />
               </div>
               <div className="flex-1">
                 <Input
