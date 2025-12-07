@@ -8,8 +8,9 @@ import Select from '../../components/ui/Select';
 import Input from '../../components/ui/Input';
 import Pagination from '../../components/ui/Pagination';
 import LoadingState from '../../components/ui/LoadingState';
-import StatusBadge from '../../components/ui/StatusBadge';
 import BaseModal, { ModalBody } from '../../components/modal/BaseModal';
+import RejectionModal from '../../components/modal/RejectionModal';
+import { getUserStatusBadgeProps } from '../../utils/roomStatusUtils';
 import defaultAvatar from '../../assets/default_avatar_3x4.jpg';
 import defaultIdCard from '../../assets/default_id_card.jpg';
 
@@ -23,6 +24,7 @@ const UserManagementPage = ({ onSuccess, onCancel }) => {
   const [unlockLoading, setUnlockLoading] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedUserDetail, setSelectedUserDetail] = useState(null);
+  const [showLockModal, setShowLockModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   const [filterStatus, setFilterStatus] = useState('All'); // All, Locked, UnLocked
@@ -156,66 +158,33 @@ const UserManagementPage = ({ onSuccess, onCancel }) => {
   };
 
   const handleSelectUser = (userId) => {
-    const selectedUser = currentUsers.find(u => u.id === userId);
-    // Only allow selecting users that can be locked/unlocked based on current filter
-    if (filterStatus === 'Locked') {
-      // Can only unlock locked users
-      if (selectedUser && selectedUser.status === 'LOCKED') {
-        setSelectedUsers(prev =>
-          prev.includes(userId)
-            ? prev.filter(id => id !== userId)
-            : [...prev, userId]
-        );
-      }
-    } else if (filterStatus === 'UnLocked' || filterStatus === 'All') {
-      // Can only lock unlocked users
-      if (selectedUser && selectedUser.status !== 'LOCKED') {
-        setSelectedUsers(prev =>
-          prev.includes(userId)
-            ? prev.filter(id => id !== userId)
-            : [...prev, userId]
-        );
-      }
-    }
+    // Allow selecting any user regardless of filter
+    setSelectedUsers(prev =>
+      prev.includes(userId)
+        ? prev.filter(id => id !== userId)
+        : [...prev, userId]
+    );
   };
 
   const handleSelectAll = () => {
-    if (filterStatus === 'Locked') {
-      const lockableUsers = currentUsers.filter(u => u.status === 'LOCKED');
-      const lockableIds = lockableUsers.map(u => u.id);
-      const allSelected = lockableIds.every(id => selectedUsers.includes(id));
-      
-      if (allSelected && lockableIds.length > 0) {
-        setSelectedUsers(prev => prev.filter(id => !lockableIds.includes(id)));
-      } else {
-        setSelectedUsers(prev => {
-          const newSelection = [...prev];
-          lockableIds.forEach(id => {
-            if (!newSelection.includes(id)) {
-              newSelection.push(id);
-            }
-          });
-          return newSelection;
-        });
-      }
+    // Select all users on current page
+    const allUserIds = currentUsers.map(u => u.id);
+    const allSelected = allUserIds.every(id => selectedUsers.includes(id));
+
+    if (allSelected && allUserIds.length > 0) {
+      // Deselect all
+      setSelectedUsers(prev => prev.filter(id => !allUserIds.includes(id)));
     } else {
-      const unlockableUsers = currentUsers.filter(u => u.status !== 'LOCKED');
-      const unlockableIds = unlockableUsers.map(u => u.id);
-      const allSelected = unlockableIds.every(id => selectedUsers.includes(id));
-      
-      if (allSelected && unlockableIds.length > 0) {
-        setSelectedUsers(prev => prev.filter(id => !unlockableIds.includes(id)));
-      } else {
-        setSelectedUsers(prev => {
-          const newSelection = [...prev];
-          unlockableIds.forEach(id => {
-            if (!newSelection.includes(id)) {
-              newSelection.push(id);
-            }
-          });
-          return newSelection;
+      // Select all
+      setSelectedUsers(prev => {
+        const newSelection = [...prev];
+        allUserIds.forEach(id => {
+          if (!newSelection.includes(id)) {
+            newSelection.push(id);
+          }
         });
-      }
+        return newSelection;
+      });
     }
   };
 
@@ -224,25 +193,66 @@ const UserManagementPage = ({ onSuccess, onCancel }) => {
     setShowDetailModal(true);
   };
 
-  const handleLockUsers = async () => {
-    if (selectedUsers.length === 0) {
+  const handleLockUsers = () => {
+    // Filter only unlocked users
+    const unlockedUserIds = selectedUsers.filter(id => {
+      const user = currentUsers.find(u => u.id === id);
+      return user && user.status !== 'LOCKED';
+    });
+
+    if (unlockedUserIds.length === 0) {
+      showError('Vui lòng chọn ít nhất một người dùng chưa bị khóa');
+      return;
+    }
+
+    // Update selection to only unlocked users before showing modal
+    setSelectedUsers(unlockedUserIds);
+    setShowLockModal(true);
+  };
+
+  const handleConfirmLock = async (reasonsData) => {
+    // Filter only unlocked users again to be safe
+    const unlockedUserIds = selectedUsers.filter(id => {
+      const user = currentUsers.find(u => u.id === id);
+      return user && user.status !== 'LOCKED';
+    });
+
+    if (unlockedUserIds.length === 0) {
       showError('Vui lòng chọn ít nhất một người dùng để khóa');
       return;
     }
 
     setLockLoading(true);
     try {
-      const response = await userApi.lockUser({ ids: selectedUsers });
-      
+      // Transform reasonsData to match backend validation schema
+      // Backend expects: { ids, reason?, reasons? }
+      // RejectionModal sends: { type: 'common'|'individual', reason?, reasons? }
+      const payload = { ids: unlockedUserIds };
+
+      if (reasonsData.type === 'common') {
+        // Send common reason
+        if (reasonsData.reason) {
+          payload.reason = reasonsData.reason;
+        }
+      } else if (reasonsData.type === 'individual') {
+        // Send individual reasons
+        if (reasonsData.reasons) {
+          payload.reasons = reasonsData.reasons;
+        }
+      }
+
+      const response = await userApi.lockUser(payload);
+
       if (response.success !== false) {
         showSuccess(response.message || 'Khóa tài khoản thành công!');
       } else {
         showError(response.message || 'Có lỗi xảy ra khi khóa tài khoản.');
       }
-      
+
+      setShowLockModal(false);
       await loadUsers();
       setSelectedUsers([]);
-      
+
       if (onSuccess) {
         onSuccess();
       }
@@ -255,74 +265,30 @@ const UserManagementPage = ({ onSuccess, onCancel }) => {
   };
 
   const handleUnlockUsers = async () => {
-    if (selectedUsers.length === 0) {
-      showError('Vui lòng chọn ít nhất một người dùng để mở khóa');
+    // Filter only locked users
+    const lockedUserIds = selectedUsers.filter(id => {
+      const user = currentUsers.find(u => u.id === id);
+      return user && user.status === 'LOCKED';
+    });
+
+    if (lockedUserIds.length === 0) {
+      showError('Vui lòng chọn ít nhất một người dùng đã bị khóa');
       return;
     }
 
     setUnlockLoading(true);
     try {
-      const response = await userApi.unLockUser({ ids: selectedUsers });
-      
+      const response = await userApi.unLockUser({ ids: lockedUserIds });
+
       if (response.success !== false) {
         showSuccess(response.message || 'Mở khóa tài khoản thành công! Mật khẩu mặc định là 123456');
       } else {
         showError(response.message || 'Có lỗi xảy ra khi mở khóa tài khoản.');
       }
-      
+
       await loadUsers();
       setSelectedUsers([]);
-      
-      if (onSuccess) {
-        onSuccess();
-      }
-    } catch (error) {
-      const errorMessage = error.response?.data?.message || error.message || 'Có lỗi xảy ra khi mở khóa tài khoản. Vui lòng thử lại.';
-      showError(errorMessage);
-    } finally {
-      setUnlockLoading(false);
-    }
-  };
 
-  const handleLockSingleUser = async (userId) => {
-    setLockLoading(true);
-    try {
-      const response = await userApi.lockUser({ ids: [userId] });
-      
-      if (response.success !== false) {
-        showSuccess(response.message || 'Khóa tài khoản thành công!');
-      } else {
-        showError(response.message || 'Có lỗi xảy ra khi khóa tài khoản.');
-      }
-      
-      await loadUsers();
-      setSelectedUsers(prev => prev.filter(id => id !== userId));
-      
-      if (onSuccess) {
-        onSuccess();
-      }
-    } catch (error) {
-      const errorMessage = error.response?.data?.message || error.message || 'Có lỗi xảy ra khi khóa tài khoản. Vui lòng thử lại.';
-      showError(errorMessage);
-    } finally {
-      setLockLoading(false);
-    }
-  };
-
-  const handleUnlockSingleUser = async (userId) => {
-    setUnlockLoading(true);
-    try {
-      const response = await userApi.unLockUser({ ids: [userId] });
-      
-      if (response.success !== false) {
-        showSuccess(response.message || 'Mở khóa tài khoản thành công! Mật khẩu mặc định là 123456');
-      } else {
-        showError(response.message || 'Có lỗi xảy ra khi mở khóa tài khoản.');
-      }
-      
-      await loadUsers();
-      setSelectedUsers(prev => prev.filter(id => id !== userId));
-      
       if (onSuccess) {
         onSuccess();
       }
@@ -348,24 +314,16 @@ const UserManagementPage = ({ onSuccess, onCancel }) => {
   };
 
   const getStatusBadge = (status) => {
-    if (status === 'LOCKED') {
-      return <StatusBadge status="rejected" size="small" />;
-    } else {
-      return <StatusBadge status="approved" size="small" />;
-    }
+    const { text, color } = getUserStatusBadgeProps(status);
+    return (
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${color}`}>
+        {text}
+      </span>
+    );
   };
 
-  const getSelectableUsers = () => {
-    if (filterStatus === 'Locked') {
-      return currentUsers.filter(u => u.status === 'LOCKED');
-    } else {
-      return currentUsers.filter(u => u.status !== 'LOCKED');
-    }
-  };
-
-  const selectableUsers = getSelectableUsers();
-  const allSelectableSelected = selectableUsers.length > 0 && 
-    selectableUsers.every(u => selectedUsers.includes(u.id));
+  const allUserIds = currentUsers.map(u => u.id);
+  const allSelected = allUserIds.length > 0 && allUserIds.every(id => selectedUsers.includes(id));
 
   return (
     <PageLayout
@@ -477,30 +435,41 @@ const UserManagementPage = ({ onSuccess, onCancel }) => {
         </div>
       </div>
 
-      {selectedUsers.length > 0 && (
-        <div className="flex items-center space-x-4 mb-6 p-4 bg-blue-50 rounded-lg">
-          <span className="text-blue-800 font-medium">Đã chọn {selectedUsers.length} người dùng</span>
-          {filterStatus === 'Locked' ? (
-            <Button
-              onClick={handleUnlockUsers}
-              variant="success"
-              loading={unlockLoading}
-              loadingText="Đang mở khóa..."
-            >
-              Mở khóa đã chọn
-            </Button>
-          ) : (
-            <Button
-              onClick={handleLockUsers}
-              variant="danger"
-              loading={lockLoading}
-              loadingText="Đang khóa..."
-            >
-              Khóa đã chọn
-            </Button>
-          )}
-        </div>
-      )}
+      {selectedUsers.length > 0 && (() => {
+        const selectedUsersData = currentUsers.filter(u => selectedUsers.includes(u.id));
+        const lockedCount = selectedUsersData.filter(u => u.status === 'LOCKED').length;
+        const unlockedCount = selectedUsersData.filter(u => u.status !== 'LOCKED').length;
+
+        return (
+          <div className="flex items-center space-x-4 mb-6 p-4 bg-blue-50 rounded-lg">
+            <span className="text-blue-800 font-medium">
+              Đã chọn {selectedUsers.length} người dùng
+              {lockedCount > 0 && ` (${lockedCount} đã khóa)`}
+              {unlockedCount > 0 && ` (${unlockedCount} chưa khóa)`}
+            </span>
+            {unlockedCount > 0 && (
+              <Button
+                onClick={handleLockUsers}
+                variant="danger"
+                loading={lockLoading}
+                loadingText="Đang khóa..."
+              >
+                Khóa {unlockedCount > 0 ? `${unlockedCount} tài khoản` : ''}
+              </Button>
+            )}
+            {lockedCount > 0 && (
+              <Button
+                onClick={handleUnlockUsers}
+                variant="success"
+                loading={unlockLoading}
+                loadingText="Đang mở khóa..."
+              >
+                Mở khóa {lockedCount > 0 ? `${lockedCount} tài khoản` : ''}
+              </Button>
+            )}
+          </div>
+        );
+      })()}
 
       <LoadingState
         isLoading={loading}
@@ -519,10 +488,10 @@ const UserManagementPage = ({ onSuccess, onCancel }) => {
                   <th className="px-6 py-3 text-left">
                     <input
                       type="checkbox"
-                      checked={allSelectableSelected}
+                      checked={allSelected}
                       onChange={handleSelectAll}
                       className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      disabled={selectableUsers.length === 0}
+                      disabled={currentUsers.length === 0}
                     />
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -547,10 +516,6 @@ const UserManagementPage = ({ onSuccess, onCancel }) => {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {currentUsers.map((user) => {
-                  const isSelectable = filterStatus === 'Locked' 
-                    ? user.status === 'LOCKED'
-                    : user.status !== 'LOCKED';
-                  
                   return (
                     <tr key={user.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -558,10 +523,7 @@ const UserManagementPage = ({ onSuccess, onCancel }) => {
                           type="checkbox"
                           checked={selectedUsers.includes(user.id)}
                           onChange={() => handleSelectUser(user.id)}
-                          disabled={!isSelectable}
-                          className={`rounded border-gray-300 text-blue-600 focus:ring-blue-500 ${
-                            !isSelectable ? 'opacity-50 cursor-not-allowed' : ''
-                          }`}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                         />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -588,36 +550,13 @@ const UserManagementPage = ({ onSuccess, onCancel }) => {
                         {getStatusBadge(user.status)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="link"
-                            onClick={() => handleViewDetail(user)}
-                            size="small"
-                          >
-                            Chi tiết
-                          </Button>
-                          {user.status === 'LOCKED' ? (
-                            <Button
-                              variant="success"
-                              onClick={() => handleUnlockSingleUser(user.id)}
-                              size="small"
-                              loading={unlockLoading}
-                              disabled={lockLoading || unlockLoading}
-                            >
-                              Mở khóa
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="danger"
-                              onClick={() => handleLockSingleUser(user.id)}
-                              size="small"
-                              loading={lockLoading}
-                              disabled={lockLoading || unlockLoading}
-                            >
-                              Khóa
-                            </Button>
-                          )}
-                        </div>
+                        <Button
+                          variant="link"
+                          onClick={() => handleViewDetail(user)}
+                          size="small"
+                        >
+                          Chi tiết
+                        </Button>
                       </td>
                     </tr>
                   );
@@ -656,24 +595,17 @@ const UserManagementPage = ({ onSuccess, onCancel }) => {
         <ModalBody className="max-h-[calc(105vh-200px)] overflow-y-auto">
           {selectedUserDetail && (
             <div className="space-y-6">
+              {/* Thông tin cơ bản */}
               <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-3">Thông tin cá nhân</h3>
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">Thông tin cơ bản</h3>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Họ và tên</label>
                     <p className="text-sm text-gray-900">{selectedUserDetail.name}</p>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">MSSV</label>
-                    <p className="text-sm text-gray-900">{selectedUserDetail.mssv || '-'}</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Trường</label>
-                    <p className="text-sm text-gray-900">{selectedUserDetail.school || '-'}</p>
-                  </div>
-                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">CCCD/CMND</label>
-                    <p className="text-sm text-gray-900">{selectedUserDetail.identification || '-'}</p>
+                    <p className="text-sm text-gray-900">{selectedUserDetail.identification}</p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Ngày sinh</label>
@@ -681,22 +613,39 @@ const UserManagementPage = ({ onSuccess, onCancel }) => {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Giới tính</label>
-                    <p className="text-sm text-gray-900">{selectedUserDetail.gender === 'MALE' ? 'Nam' : selectedUserDetail.gender === 'FEMALE' ? 'Nữ' : '-'}</p>
+                    <p className="text-sm text-gray-900">
+                      {selectedUserDetail.gender?.toLowerCase() === 'male' ? 'Nam' :
+                       selectedUserDetail.gender?.toLowerCase() === 'female' ? 'Nữ' : 'Khác'}
+                    </p>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                    <p className="text-sm text-gray-900">{selectedUserDetail.email || '-'}</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Trạng thái</label>
-                    {getStatusBadge(selectedUserDetail.status)}
+                    <p className="text-sm text-gray-900">{selectedUserDetail.email}</p>
                   </div>
                 </div>
               </div>
 
+              {/* Thông tin sinh viên */}
+              {(selectedUserDetail.mssv || selectedUserDetail.school) && (
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-3">Thông tin sinh viên</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">MSSV</label>
+                      <p className="text-sm text-gray-900">{selectedUserDetail.mssv || '-'}</p>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Trường</label>
+                      <p className="text-sm text-gray-900">{selectedUserDetail.school || '-'}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Thông tin phòng */}
               {selectedUserDetail.roomNumber && (
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-3">Thông tin phòng</h3>
+                  <h3 className="text-lg font-semibold text-gray-800 mb-3">Thông tin phòng ở</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Số phòng</label>
@@ -704,14 +653,16 @@ const UserManagementPage = ({ onSuccess, onCancel }) => {
                     </div>
                     {selectedUserDetail.slotNumber && (
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Vị trí</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Vị trí giường</label>
                         <p className="text-sm text-gray-900">{selectedUserDetail.slotNumber}</p>
                       </div>
                     )}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Ngày đăng ký</label>
-                      <p className="text-sm text-gray-900">{formatDate(selectedUserDetail.registerDate)}</p>
-                    </div>
+                    {selectedUserDetail.registerDate && (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Ngày đăng ký</label>
+                        <p className="text-sm text-gray-900">{formatDate(selectedUserDetail.registerDate)}</p>
+                      </div>
+                    )}
                     {selectedUserDetail.approvedDate && (
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Ngày duyệt</label>
@@ -720,7 +671,7 @@ const UserManagementPage = ({ onSuccess, onCancel }) => {
                     )}
                     {selectedUserDetail.duration && (
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Thời hạn</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Thời hạn ở</label>
                         <p className="text-sm text-gray-900">{selectedUserDetail.duration} tháng</p>
                       </div>
                     )}
@@ -734,39 +685,81 @@ const UserManagementPage = ({ onSuccess, onCancel }) => {
                 </div>
               )}
 
+              {/* Ảnh đính kèm */}
               <div>
-                <h3 className="text-lg font-semibold text-gray-800 mb-3">Ảnh đại diện</h3>
-                <div className="flex justify-center">
-                  <img
-                    src={selectedUserDetail.avatar || defaultAvatar}
-                    alt="Avatar"
-                    className="w-32 h-40 object-cover rounded-lg border border-gray-300"
-                    onError={(e) => {
-                      e.target.src = defaultAvatar;
-                    }}
-                  />
-                </div>
-              </div>
-
-              {selectedUserDetail.frontIdentificationImage && (
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-800 mb-3">Ảnh CCCD/CMND mặt trước</h3>
-                  <div className="flex justify-center">
-                    <img
-                      src={selectedUserDetail.frontIdentificationImage || defaultIdCard}
-                      alt="ID Card"
-                      className="w-full max-w-md object-cover rounded-lg border border-gray-300"
-                      onError={(e) => {
-                        e.target.src = defaultIdCard;
-                      }}
-                    />
+                <h3 className="text-lg font-semibold text-gray-800 mb-3">Ảnh đính kèm</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Ảnh CCCD mặt trước</label>
+                    <div className="border border-gray-300 rounded-lg p-2 bg-gray-50">
+                      <img
+                        src={selectedUserDetail.frontIdentificationImage || defaultIdCard}
+                        alt="CCCD mặt trước"
+                        className="w-full h-64 object-contain rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                        onClick={() => {
+                          const imageUrl = selectedUserDetail.frontIdentificationImage || defaultIdCard;
+                          window.open(imageUrl, '_blank');
+                        }}
+                        onError={(e) => {
+                          console.error('Error loading CCCD image:', selectedUserDetail.frontIdentificationImage);
+                          e.target.src = defaultIdCard;
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Ảnh 3x4</label>
+                    <div className="border border-gray-300 rounded-lg p-2 bg-gray-50">
+                      <img
+                        src={selectedUserDetail.avatar || defaultAvatar}
+                        alt="Ảnh 3x4"
+                        className="w-full h-64 object-contain rounded-lg cursor-pointer hover:opacity-90 transition-opacity"
+                        onClick={() => {
+                          const imageUrl = selectedUserDetail.avatar || defaultAvatar;
+                          window.open(imageUrl, '_blank');
+                        }}
+                        onError={(e) => {
+                          console.error('Error loading avatar:', selectedUserDetail.avatar);
+                          e.target.src = defaultAvatar;
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
-              )}
+              </div>
             </div>
           )}
         </ModalBody>
       </BaseModal>
+
+      <RejectionModal
+        isOpen={showLockModal}
+        onClose={() => setShowLockModal(false)}
+        onConfirm={handleConfirmLock}
+        title="Nhập lý do khóa tài khoản"
+        selectedItems={currentUsers.filter(u => selectedUsers.includes(u.id)).map(u => ({
+          id: u.id,
+          studentName: u.name,
+          mssv: u.mssv,
+          studentIdNumber: u.identification,
+          studentEmail: u.email
+        }))}
+        onViewDetail={(item) => {
+          const user = currentUsers.find(u => u.id === item.id);
+          if (user) {
+            handleViewDetail(user);
+          }
+        }}
+        onRemoveItem={(itemId) => {
+          setSelectedUsers(prev => {
+            const newSelection = prev.filter(id => id !== itemId);
+            if (newSelection.length === 0) {
+              setShowLockModal(false);
+            }
+            return newSelection;
+          });
+        }}
+      />
     </PageLayout>
   );
 };
