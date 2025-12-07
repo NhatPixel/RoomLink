@@ -31,6 +31,7 @@ import BuildingManagementPage from './pages/admin/BuildingManagementPage';
 import RoomTransferApprovalPage from './pages/admin/RoomTransferApprovalPage';
 import ElectricityWaterBillCreationPage from './pages/admin/ElectricityWaterBillCreationPage';
 import HealthCheckUpManagementPage from './pages/admin/HealthCheckUpManagementPage';
+import UserManagementPage from './pages/admin/UserManagementPage';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import './App.css';
@@ -71,6 +72,7 @@ function App() {
             <Route path="/room-transfer-approval" element={<RoomTransferApprovalPageWrapper />} />
             <Route path="/electricity-water-bill-creation" element={<ElectricityWaterBillCreationPageWrapper />} />
             <Route path="/health-checkup-management" element={<HealthCheckUpManagementPageWrapper />} />
+            <Route path="/user-management" element={<UserManagementPageWrapper />} />
             <Route path="*" element={<HomePage />} />
             </Routes>
           </ProtectedRoute>
@@ -524,6 +526,19 @@ const BuildingManagementPageWrapper = () => {
 
   return (
     <BuildingManagementPage
+      onCancel={handleCancel}
+    />
+  );
+};
+
+// User Management Page Wrapper
+const UserManagementPageWrapper = () => {
+  const handleCancel = () => {
+    window.location.href = '/admin';
+  };
+
+  return (
+    <UserManagementPage
       onCancel={handleCancel}
     />
   );
