@@ -152,7 +152,7 @@ export const getUserStatusText = (status) => {
   const statusMap = {
     'LOCKED': 'Đã khóa',
     'APPROVED_CHANGED': 'Hoạt động',
-    'APPROVED_NOT_CHANGED': 'Chưa đổi mật khẩu',
+    'APPROVED_NOT_CHANGED': 'Hoạt động',
     'REGISTERED': 'Đã đăng ký'
   };
   return statusMap[status] || status || 'Không xác định';
@@ -167,7 +167,7 @@ export const getUserStatusColor = (status) => {
   const colorMap = {
     'LOCKED': 'bg-red-100 text-red-800',
     'APPROVED_CHANGED': 'bg-green-100 text-green-800',
-    'APPROVED_NOT_CHANGED': 'bg-yellow-100 text-yellow-800',
+    'APPROVED_NOT_CHANGED': 'bg-green-100 text-green-800',
     'REGISTERED': 'bg-blue-100 text-blue-800'
   };
   return colorMap[status] || 'bg-gray-100 text-gray-800';

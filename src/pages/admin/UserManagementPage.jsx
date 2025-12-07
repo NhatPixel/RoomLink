@@ -26,7 +26,7 @@ const UserManagementPage = ({ onSuccess, onCancel }) => {
   const [selectedUserDetail, setSelectedUserDetail] = useState(null);
   const [showLockModal, setShowLockModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
+  const [itemsPerPage] = useState(5);
   const [filterStatus, setFilterStatus] = useState('All'); // All, Locked, UnLocked
   const [searchKeyword, setSearchKeyword] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -356,7 +356,7 @@ const UserManagementPage = ({ onSuccess, onCancel }) => {
               </svg>
             </div>
             <div className="ml-4">
-              <p className="text-sm font-medium text-green-600">Đã mở khóa</p>
+              <p className="text-sm font-medium text-green-600">Không khóa</p>
               <p className="text-2xl font-bold text-green-900">{statistics.unlocked}</p>
             </div>
           </div>
