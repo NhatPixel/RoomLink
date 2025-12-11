@@ -125,17 +125,16 @@ export const transformPaymentToBill = (payment, roomNumber, userName = '') => {
   const billTypeName = getPaymentTypeName(payment.type);
   const status = isPaymentPaid(payment.status) ? 'paid' : 'unpaid';
   
-  // Calculate issueDate (first day of month for bills with period, or use createdAt)
-  let issueDate = new Date(payment.createdAt || Date.now());
-  if (periodStr) {
-    const [year, month] = periodStr.split('-');
-    issueDate = new Date(parseInt(year), parseInt(month) - 1, 1); // First day of the month
-  }
-  
-  // Calculate dueDate (15 days after issueDate for electricity/water bills, same day for others)
-  const dueDate = new Date(issueDate);
-  if (payment.type === PAYMENT_TYPES.ELECTRICITY || payment.type === PAYMENT_TYPES.WATER) {
-    dueDate.setDate(dueDate.getDate() + 15);
+  const issueDateObj = new Date(payment.createdAt || Date.now());
+
+  let dueDateObj;
+  if (payment.dueDate) {
+    dueDateObj = new Date(payment.dueDate);
+  } else {
+    dueDateObj = new Date(issueDateObj);
+    if (payment.type === PAYMENT_TYPES.ELECTRICITY || payment.type === PAYMENT_TYPES.WATER) {
+      dueDateObj.setDate(dueDateObj.getDate() + 15);
+    }
   }
 
   return {
@@ -147,8 +146,8 @@ export const transformPaymentToBill = (payment, roomNumber, userName = '') => {
     billTypeName,
     paymentType: payment.type,
     period,
-    issueDate: issueDate.toISOString().split('T')[0],
-    dueDate: dueDate.toISOString().split('T')[0],
+    issueDate: issueDateObj.toISOString().split('T')[0],
+    dueDate: dueDateObj.toISOString().split('T')[0],
     amount: parseFloat(payment.amount) || 0,
     status,
     paymentStatus: payment.status,

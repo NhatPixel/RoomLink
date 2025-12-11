@@ -143,3 +143,45 @@ export const getApprovalStatusBadgeProps = (status) => {
   };
 };
 
+/**
+ * Get Vietnamese text for user account status
+ * @param {string} status - User status: 'LOCKED', 'APPROVED_CHANGED', 'APPROVED_NOT_CHANGED', 'REGISTERED'
+ * @returns {string} Vietnamese text for the status
+ */
+export const getUserStatusText = (status) => {
+  const statusMap = {
+    'LOCKED': 'Đã khóa',
+    'APPROVED_CHANGED': 'Hoạt động',
+    'APPROVED_NOT_CHANGED': 'Hoạt động',
+    'REGISTERED': 'Đã đăng ký'
+  };
+  return statusMap[status] || status || 'Không xác định';
+};
+
+/**
+ * Get color classes for user account status badge
+ * @param {string} status - User status
+ * @returns {string} Tailwind CSS classes for badge color
+ */
+export const getUserStatusColor = (status) => {
+  const colorMap = {
+    'LOCKED': 'bg-red-100 text-red-800',
+    'APPROVED_CHANGED': 'bg-green-100 text-green-800',
+    'APPROVED_NOT_CHANGED': 'bg-green-100 text-green-800',
+    'REGISTERED': 'bg-blue-100 text-blue-800'
+  };
+  return colorMap[status] || 'bg-gray-100 text-gray-800';
+};
+
+/**
+ * Get user status badge props
+ * @param {string} status - User status
+ * @returns {object} Object with text and color properties
+ */
+export const getUserStatusBadgeProps = (status) => {
+  return {
+    text: getUserStatusText(status),
+    color: getUserStatusColor(status)
+  };
+};
+

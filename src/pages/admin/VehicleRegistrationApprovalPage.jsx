@@ -27,6 +27,8 @@ const VehicleRegistrationApprovalPage = ({ onSuccess, onCancel }) => {
   const [itemsPerPage] = useState(5);
   const [filterStatus, setFilterStatus] = useState('all'); // all, pending, approved, rejected
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [totalItems, setTotalItems] = useState(0);
   const [statistics, setStatistics] = useState({
     total: 0,
@@ -37,35 +39,7 @@ const VehicleRegistrationApprovalPage = ({ onSuccess, onCancel }) => {
 
   useEffect(() => {
     loadNumberPlates();
-  }, [filterStatus, currentPage, searchKeyword]);
-
-  // Load statistics riêng, không phụ thuộc vào filter hoặc page
-  useEffect(() => {
-    loadStatistics();
-  }, []); // Chỉ load một lần khi component mount
-
-  // Load statistics cho tất cả đơn (không phân trang, không filter)
-  const loadStatistics = async () => {
-    try {
-      // Gọi 4 API riêng để lấy số liệu thống kê
-      const [allResponse, pendingResponse, approvedResponse, rejectedResponse] = await Promise.all([
-        numberPlateApi.getNumberPlates({ page: 1, limit: 1 }),
-        numberPlateApi.getNumberPlates({ status: 'pending', page: 1, limit: 1 }),
-        numberPlateApi.getNumberPlates({ status: 'approved', page: 1, limit: 1 }),
-        numberPlateApi.getNumberPlates({ status: 'rejected', page: 1, limit: 1 })
-      ]);
-
-      setStatistics({
-        total: allResponse.totalItems || 0,
-        pending: pendingResponse.totalItems || 0,
-        approved: approvedResponse.totalItems || 0,
-        rejected: rejectedResponse.totalItems || 0
-      });
-    } catch (error) {
-      console.error('Error loading statistics:', error);
-      // Không hiển thị error để tránh làm phiền user
-    }
-  };
+  }, [filterStatus, currentPage, searchKeyword, startDate, endDate]);
 
   const loadNumberPlates = async () => {
     try {
@@ -82,14 +56,30 @@ const VehicleRegistrationApprovalPage = ({ onSuccess, onCancel }) => {
         params.status = filterStatus;
       }
       
+      // Add date filter
+      if (startDate) {
+        params.startDate = startDate;
+      }
+      if (endDate) {
+        params.endDate = endDate;
+      }
+      
       const response = await numberPlateApi.getNumberPlates(params);
       
       // axiosClient already returns response.data, so response is ApiResponse object
-      // ApiResponse structure: { success, data, page, limit, totalItems }
+      // ApiResponse structure: { success, data, page, limit, totalItems, totalApproved, totalUnapproved, totalReject }
       console.log('API Response:', response);
       
       const data = response.data || [];
       const totalItems = response.totalItems || 0;
+      
+      // Update statistics from API response
+      setStatistics({
+        total: totalItems,
+        pending: response.totalUnapproved || 0,
+        approved: response.totalApproved || 0,
+        rejected: response.totalReject || 0
+      });
       
       console.log('Parsed data:', data);
       console.log('First item sample:', data[0]);
@@ -238,7 +228,6 @@ const VehicleRegistrationApprovalPage = ({ onSuccess, onCancel }) => {
       // Reload danh sách và statistics
       await Promise.all([
         loadNumberPlates(),
-        loadStatistics()
       ]);
       
       // selectedRequests sẽ được tự động loại bỏ đơn đã duyệt trong loadNumberPlates
@@ -290,7 +279,6 @@ const VehicleRegistrationApprovalPage = ({ onSuccess, onCancel }) => {
       // Reload danh sách và statistics
       await Promise.all([
         loadNumberPlates(),
-        loadStatistics()
       ]);
       
       // Clear selectedRequests sau khi reload
@@ -394,6 +382,38 @@ const VehicleRegistrationApprovalPage = ({ onSuccess, onCancel }) => {
               <option value="approved">Đã duyệt</option>
               <option value="rejected">Từ chối</option>
             </Select>
+          </div>
+          <div className="w-40">
+            <Input
+              type="date"
+              value={startDate}
+              onChange={(e) => {
+                setStartDate(e.target.value);
+                setCurrentPage(1);
+              }}
+              onClear={startDate ? () => {
+                setStartDate('');
+                setCurrentPage(1);
+              } : undefined}
+              placeholder="Từ ngày"
+              size="medium"
+            />
+          </div>
+          <div className="w-40">
+            <Input
+              type="date"
+              value={endDate}
+              onChange={(e) => {
+                setEndDate(e.target.value);
+                setCurrentPage(1);
+              }}
+              onClear={endDate ? () => {
+                setEndDate('');
+                setCurrentPage(1);
+              } : undefined}
+              placeholder="Đến ngày"
+              size="medium"
+            />
           </div>
           <div className="flex-1">
             <Input

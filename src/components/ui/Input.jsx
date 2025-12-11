@@ -38,21 +38,6 @@ const Input = ({
 
   const inputId = props.id || name;
 
-  const inputElement = (
-    <input
-      id={inputId}
-      name={name}
-      type={type}
-      value={value}
-      onChange={onChange}
-      placeholder={placeholder}
-      required={required}
-      disabled={disabled}
-      className={baseInputClasses}
-      {...props}
-    />
-  );
-
   const renderInput = () => {
     // Search variant với icon search và clear button
     if (variant === 'search') {
@@ -93,7 +78,54 @@ const Input = ({
       );
     }
     
-    return inputElement;
+    // Default variant với clear button nếu có onClear
+    if (onClear && value) {
+      return (
+        <div className="relative">
+          <input
+            id={inputId}
+            name={name}
+            type={type}
+            value={value}
+            onChange={onChange}
+            placeholder={placeholder}
+            required={required}
+            disabled={disabled}
+            className={`${baseInputClasses} ${value && onClear ? 'pr-10' : ''}`}
+            {...props}
+          />
+          {value && onClear && (
+            <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+              <button
+                type="button"
+                onClick={onClear}
+                className="text-gray-400 hover:text-gray-600 focus:outline-none"
+                tabIndex={-1}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          )}
+        </div>
+      );
+    }
+    
+    return (
+      <input
+        id={inputId}
+        name={name}
+        type={type}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        required={required}
+        disabled={disabled}
+        className={baseInputClasses}
+        {...props}
+      />
+    );
   };
 
   return (

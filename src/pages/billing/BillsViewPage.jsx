@@ -16,6 +16,8 @@ import Pagination from '../../components/ui/Pagination';
 import LoadingState from '../../components/ui/LoadingState';
 import PageHeader from '../../components/ui/PageHeader';
 import BaseModal, { ModalBody, ModalFooter } from '../../components/modal/BaseModal';
+import Select from '../../components/ui/Select';
+import Input from '../../components/ui/Input';
 
 const BillsView = ({ onSuccess, onCancel }) => {
   const [bills, setBills] = useState([]);
@@ -24,7 +26,16 @@ const BillsView = ({ onSuccess, onCancel }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(6);
   const [filter, setFilter] = useState('all'); // all, paid, unpaid
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [filterType, setFilterType] = useState(''); // Payment type
+  const [searchKeyword, setSearchKeyword] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [statistics, setStatistics] = useState({
+    total: 0,
+    paidAmount: 0,
+    unpaidAmount: 0
+  });
   const { user, isLoading: authLoading } = useAuth();
   const isAdmin = user?.role === 'admin';
   const { showError, showSuccess } = useNotification();
@@ -37,26 +48,49 @@ const BillsView = ({ onSuccess, onCancel }) => {
       try {
         setIsLoading(true);
 
-        // Load payments - get all payments for user
-        // Backend will automatically get userId from token
-        // Payment types: "ROOM", "REFUND", "ELECTRICITY", "WATER", "HEALTHCHECK"
-        // Backend now returns roomNumber in payment response
-        console.log('Calling paymentApi.getPaymentByUserId');
-        const paymentResponse = await paymentApi.getPaymentByUserId({
-          page: 1,
-          limit: 1000 // Get all payments
-        });
+        // Build API params with filters
+        const params = {
+          page: currentPage,
+          limit: itemsPerPage
+        };
+
+        // Add type filter if selected
+        if (filterType) {
+          params.type = filterType;
+        }
+
+        // Add date filter
+        if (startDate) {
+          params.startDate = startDate;
+        }
+        if (endDate) {
+          params.endDate = endDate;
+        }
+
+        // Add keyword filter
+        if (searchKeyword.trim()) {
+          params.keyword = searchKeyword.trim();
+        }
+
+        console.log('Calling paymentApi.getPaymentByUserId with params:', params);
+        const paymentResponse = await paymentApi.getPaymentByUserId(params);
 
         console.log('Payment response:', paymentResponse);
 
-        // Get all payments (no filter)
-        // Response structure from ApiResponse: { data: [...payments], pagination: {...} }
-        // axiosClient may unwrap response.data, so check both structures
+        // Get payments from response
+        // Response structure from ApiResponse: { data: [...payments], pagination: {...}, paidAmount, unpaidAmount }
         const allPayments = Array.isArray(paymentResponse.data) 
           ? paymentResponse.data 
           : (paymentResponse.data?.data || paymentResponse.data?.response || []);
 
         console.log('All payments:', allPayments);
+
+        // Update statistics from API response
+        setStatistics({
+          total: paymentResponse.totalItems || 0,
+          paidAmount: paymentResponse.paidAmount || 0,
+          unpaidAmount: paymentResponse.unpaidAmount || 0
+        });
 
         // Transform payments to bills
         // Use roomNumber from payment response if available, otherwise use fallback
@@ -90,26 +124,27 @@ const BillsView = ({ onSuccess, onCancel }) => {
       console.log('No user available, skipping loadBills');
       setIsLoading(false);
     }
-  }, [user, authLoading]);
+  }, [user, authLoading, filterType, startDate, endDate, currentPage, searchKeyword]);
+
 
   useEffect(() => {
-    // Filter bills based on selected filter
+    // Filter bills based on payment status only (date and type are handled by API)
     let filtered = bills;
+    
+    // Filter by payment status
     if (filter === 'paid') {
-      filtered = bills.filter(bill => isPaymentPaid(bill.paymentStatus));
+      filtered = filtered.filter(bill => isPaymentPaid(bill.paymentStatus));
     } else if (filter === 'unpaid') {
-      filtered = bills.filter(bill => !isPaymentPaid(bill.paymentStatus));
+      filtered = filtered.filter(bill => !isPaymentPaid(bill.paymentStatus));
     }
+    
     setFilteredBills(filtered);
-    setCurrentPage(1); // Reset to first page when filter changes
   }, [bills, filter]);
 
+  // Use bills directly for pagination since API handles pagination
   useEffect(() => {
-    // Calculate pagination
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    setPaginatedBills(filteredBills.slice(startIndex, endIndex));
-  }, [filteredBills, currentPage, itemsPerPage]);
+    setPaginatedBills(filteredBills);
+  }, [filteredBills]);
 
   const handleFilterChange = (newFilter) => {
     setFilter(newFilter);
@@ -180,13 +215,6 @@ const BillsView = ({ onSuccess, onCancel }) => {
     return bills.reduce((total, bill) => total + bill.amount, 0);
   };
 
-  const getPaidAmount = () => {
-    return bills.filter(bill => isPaymentPaid(bill.paymentStatus)).reduce((total, bill) => total + bill.amount, 0);
-  };
-
-  const getUnpaidAmount = () => {
-    return bills.filter(bill => !isPaymentPaid(bill.paymentStatus)).reduce((total, bill) => total + bill.amount, 0);
-  };
 
   const handlePayment = async (paymentId) => {
     try {
@@ -249,92 +277,160 @@ const BillsView = ({ onSuccess, onCancel }) => {
           }
         />
 
+        {/* Summary Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                  <span className="text-blue-600 font-bold">📊</span>
+                </div>
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">Tổng số giao dịch</p>
+                <p className="text-2xl font-semibold text-gray-900">{statistics.total}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                  <span className="text-green-600 font-bold">✅</span>
+                </div>
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">Đã thanh toán</p>
+                <p className="text-2xl font-semibold text-green-600">{formatPrice(statistics.paidAmount)}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
+                  <span className="text-red-600 font-bold">⚠️</span>
+                </div>
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-500">Chưa thanh toán</p>
+                <p className="text-2xl font-semibold text-red-600">{formatPrice(statistics.unpaidAmount)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Filter Tabs */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+          <div className="flex flex-wrap gap-4 items-end">
+            <div className="flex flex-wrap gap-4 flex-1">
+              <button
+                onClick={() => handleFilterChange('all')}
+                className={`px-4 py-2 rounded-md font-medium transition-colors ${
+                  filter === 'all'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Tất cả ({bills.length})
+              </button>
+              <button
+                onClick={() => handleFilterChange('paid')}
+                className={`px-4 py-2 rounded-md font-medium transition-colors ${
+                  filter === 'paid'
+                    ? 'bg-green-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Đã thanh toán ({bills.filter(bill => isPaymentPaid(bill.paymentStatus)).length})
+              </button>
+              <button
+                onClick={() => handleFilterChange('unpaid')}
+                className={`px-4 py-2 rounded-md font-medium transition-colors ${
+                  filter === 'unpaid'
+                    ? 'bg-red-600 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Chưa thanh toán ({bills.filter(bill => !isPaymentPaid(bill.paymentStatus)).length})
+              </button>
+            </div>
+            <div className="flex gap-4">
+              <div className="w-40">
+                <Input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => {
+                    setStartDate(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  onClear={startDate ? () => {
+                    setStartDate('');
+                    setCurrentPage(1);
+                  } : undefined}
+                  placeholder="Từ ngày"
+                  size="medium"
+                />
+              </div>
+              <div className="w-40">
+                <Input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => {
+                    setEndDate(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  onClear={endDate ? () => {
+                    setEndDate('');
+                    setCurrentPage(1);
+                  } : undefined}
+                  placeholder="Đến ngày"
+                  size="medium"
+                />
+              </div>
+              <div className="w-48">
+                <Select
+                  value={filterType}
+                  onChange={(e) => {
+                    setFilterType(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                >
+                  <option value="">Tất cả loại</option>
+                  <option value={PAYMENT_TYPES.ROOM}>{getPaymentTypeName(PAYMENT_TYPES.ROOM)}</option>
+                  <option value={PAYMENT_TYPES.ELECTRICITY}>{getPaymentTypeName(PAYMENT_TYPES.ELECTRICITY)}</option>
+                  <option value={PAYMENT_TYPES.WATER}>{getPaymentTypeName(PAYMENT_TYPES.WATER)}</option>
+                  <option value={PAYMENT_TYPES.HEALTHCHECK}>{getPaymentTypeName(PAYMENT_TYPES.HEALTHCHECK)}</option>
+                  <option value={PAYMENT_TYPES.REFUND}>{getPaymentTypeName(PAYMENT_TYPES.REFUND)}</option>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <div className="mt-4">
+            <Input
+              variant="search"
+              placeholder="Tìm kiếm theo nội dung, trạng thái..."
+              value={searchKeyword}
+              onChange={(e) => {
+                setSearchKeyword(e.target.value);
+                setCurrentPage(1);
+              }}
+              onClear={() => {
+                setSearchKeyword('');
+                setCurrentPage(1);
+              }}
+              size="medium"
+            />
+          </div>
+        </div>
+
         <LoadingState
           isLoading={isLoading}
           loadingText="Đang tải..."
         >
           <>
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                      <span className="text-blue-600 font-bold">📊</span>
-                    </div>
-                  </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-500">Tổng số giao dịch</p>
-                    <p className="text-2xl font-semibold text-gray-900">{bills.length}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                      <span className="text-green-600 font-bold">✅</span>
-                    </div>
-                  </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-500">Đã thanh toán</p>
-                    <p className="text-2xl font-semibold text-green-600">{formatPrice(getPaidAmount())}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
-                      <span className="text-red-600 font-bold">⚠️</span>
-                    </div>
-                  </div>
-                  <div className="ml-4">
-                    <p className="text-sm font-medium text-gray-500">Chưa thanh toán</p>
-                    <p className="text-2xl font-semibold text-red-600">{formatPrice(getUnpaidAmount())}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Filter Tabs */}
-            <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-              <div className="flex flex-wrap gap-4">
-                <button
-                  onClick={() => handleFilterChange('all')}
-                  className={`px-4 py-2 rounded-md font-medium transition-colors ${
-                    filter === 'all'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  Tất cả ({bills.length})
-                </button>
-                <button
-                  onClick={() => handleFilterChange('paid')}
-                  className={`px-4 py-2 rounded-md font-medium transition-colors ${
-                    filter === 'paid'
-                      ? 'bg-green-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  Đã thanh toán ({bills.filter(bill => isPaymentPaid(bill.paymentStatus)).length})
-                </button>
-                <button
-                  onClick={() => handleFilterChange('unpaid')}
-                  className={`px-4 py-2 rounded-md font-medium transition-colors ${
-                    filter === 'unpaid'
-                      ? 'bg-red-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  Chưa thanh toán ({bills.filter(bill => !isPaymentPaid(bill.paymentStatus)).length})
-                </button>
-              </div>
-            </div>
-
             {/* Bills List */}
             {filteredBills.length === 0 ? (
               emptyState
@@ -445,14 +541,14 @@ const BillsView = ({ onSuccess, onCancel }) => {
             </div>
 
                 {/* Pagination */}
-                {filteredBills.length > itemsPerPage && (
+                {statistics.total > itemsPerPage && (
                   <div className="mt-8">
                     <Pagination
                       currentPage={currentPage}
-                      totalPages={Math.ceil(filteredBills.length / itemsPerPage)}
+                      totalPages={Math.ceil(statistics.total / itemsPerPage)}
                       onPageChange={handlePageChange}
                       itemsPerPage={itemsPerPage}
-                      totalItems={filteredBills.length}
+                      totalItems={statistics.total}
                     />
                   </div>
                 )}
